@@ -1,0 +1,72 @@
+Tôi đã đối chiếu trực tiếp hai codebase. Kết luận: Gorth Browser hiện đã có phần khung giao diện trình duyệt khá đầy đủ, nhưng Flow Browser vượt xa ở tầng “browser engine” và quản lý dữ liệu lâu dài.
+Những tính năng Flow có nhưng Gorth chưa có
+| Nhóm | Flow Browser | Gorth Browser hiện tại |
+|---|---|---|
+|---| Khôi phục phiên | Lưu tab, nhóm tab, vị trí cửa sổ và tự khôi phục khi mở lại | Tab chỉ tồn tại trong React state, đóng app là mất |
+|---| Recently closed | Mở lại tab vừa đóng với `Cmd/Ctrl+Shift+T` | Chưa có |
+| Nhiều cửa sổ | New window, quản lý tab theo từng cửa sổ | Một cửa sổ chính |
+| Incognito | Cửa sổ riêng tư với session riêng | Chưa có |
+| Profiles | Nhiều profile, session và extension riêng | Chưa có |
+| Spaces | Không gian làm việc riêng, chuyển space | Chưa có |
+| Tab groups | Nhóm tab dạng normal, split và glance | Chỉ có split hai tab đơn giản |
+| Kéo thả tab | Sắp xếp tab, nhóm tab và pinned tab bằng drag-and-drop | Chưa có |
+| Tab sleeping | Tự ngủ tab sau khoảng thời gian cấu hình | Chưa có |
+| Tab archive | Tự archive tab cũ | Chưa có |
+| Omnibox | Gợi ý từ lịch sử, tab đang mở, tìm kiếm, commands/pedals | Address bar mới chỉ nhận URL hoặc Google search |
+| Search bangs | Hỗ trợ cú pháp tìm kiếm nhanh theo provider | Chưa có |
+|---| Find in page | `Cmd/Ctrl+F`, số kết quả và điều hướng kết quả | Chưa có |
+| Content blocker | Chặn quảng cáo, tracker và cookie notice bằng Ghostery | Chưa có |
+| Extensions | Cài, gỡ và quản lý Chrome extensions/Web Store, MV2/MV3 | Trang `gorth://extensions` mới là giao diện placeholder |
+| Web permissions | Xử lý camera, microphone, notifications và quyền website | Chưa có hệ thống cấp quyền |
+| Passkeys/WebAuthn | Hỗ trợ đăng nhập passkey và conditional UI | Chưa có |
+| HTTP Basic Auth | Hiển thị prompt đăng nhập server/proxy | Chưa có |
+| Picture-in-Picture | Bật/tắt PiP cho video | Chưa có |
+|---| Fullscreen web | Đồng bộ HTML fullscreen với cửa sổ Electron | Mới theo dõi fullscreen của cửa sổ |
+| PDF viewer | Trình đọc PDF riêng, thumbnail, outline, search, zoom, annotation | Chưa có |
+| Widevine DRM | Dùng Electron Castlabs để phát nội dung DRM | Dùng Electron tiêu chuẩn |
+| Auto update | Kiểm tra, tải và cài bản cập nhật | Chưa có |
+| Default browser | Kiểm tra và đặt làm trình duyệt mặc định | Chưa có |
+| Onboarding | Quy trình thiết lập lần đầu | Chưa có |
+| Custom shortcuts | Danh sách, chỉnh sửa và reset phím tắt | Chưa có hệ thống shortcut |
+|---| Native app menu | Menu File/Edit/View/Tabs/Spaces/Window | Chưa có menu ứng dụng hoàn chỉnh |
+|---| Database | SQLite + Drizzle cho lịch sử, settings, tabs, profiles | Dùng `localStorage` |
+|---| Error/offline pages | Trang lỗi và các game offline | Chưa có |
+| Browser prompts | Prompt quyền, auth và các yêu cầu từ website | Chưa có |
+| Multi-window tab sync | Tuỳ chọn đồng bộ tab giữa các cửa sổ | Chưa có |
+| Handoff | Hỗ trợ macOS Handoff | Chưa có |
+
+Các bằng chứng chính nằm tại:
+- [basic-settings.ts (line 47)](/Users/macbook/Projects/JetBrains/WebstormProjects/gorth-browser/flow-browser/src/main/modules/basic-settings.ts:47)
+- [shortcuts.ts (line 51)](/Users/macbook/Projects/JetBrains/WebstormProjects/gorth-browser/flow-browser/src/main/modules/shortcuts.ts:51)
+- [tab restore (line 13)](/Users/macbook/Projects/JetBrains/WebstormProjects/gorth-browser/flow-browser/src/main/saving/tabs/restore.ts:13)
+- [content-blocker.ts (line 15)](/Users/macbook/Projects/JetBrains/WebstormProjects/gorth-browser/flow-browser/src/main/modules/content-blocker.ts:15)
+- [extensions management (line 185)](/Users/macbook/Projects/JetBrains/WebstormProjects/gorth-browser/flow-browser/src/main/modules/extensions/management.ts:185)
+- [find-in-page.ts (line 42)](/Users/macbook/Projects/JetBrains/WebstormProjects/gorth-browser/flow-browser/src/main/ipc/browser/find-in-page.ts:42)
+- [tab-lifecycle.ts (line 106)](/Users/macbook/Projects/JetBrains/WebstormProjects/gorth-browser/flow-browser/src/main/controllers/tabs-controller/tab-lifecycle.ts:106)
+Những trang Gorth đang có nhưng chức năng chưa hoàn chỉnh
+- gorth://downloads: mới là empty state, chưa theo dõi will-download.
+- gorth://extensions: chưa cài hoặc quản lý extension thật.
+- gorth://flags: các switch chủ yếu lưu trạng thái, chưa điều khiển browser engine.
+- History và bookmarks: có hoạt động cơ bản nhưng chỉ lưu bằng localStorage.
+- Pin tab: đã có giao diện và trạng thái trong phiên hiện tại nhưng chưa lưu qua lần khởi động tiếp theo.
+- Settings: mới có theme, sidebar, logo và vertical tabs.
+Thứ tự nên triển khai
+Tôi đề xuất ưu tiên theo thứ tự:
+1. Lưu và khôi phục session/tab bằng SQLite.
+2. Recently closed tab và keyboard shortcuts.
+3. Omnibox suggestions từ history, bookmarks và open tabs.
+4. Download manager thật.
+5. Find in page.
+6. Permission prompts và HTTP authentication.
+7. Incognito và profiles.
+8. Tab sleeping cùng content blocker.
+9. Chrome extensions.
+10. Auto update, default browser và onboarding.
+Ba mục đầu sẽ làm Gorth Browser có cảm giác như một trình duyệt thực sự nhanh nhất; extension và profiles nên để sau vì chúng tác động sâu đến session, partition và vòng đời WebContentsView.
+
+tôi đã roolback lại file tooltip trong ui, thêm rule ko sửa bất kỳ thứ gì trong @/components/ui vào skill gorth-desktop-architecture
+tạo file providers/tooltip.tsx ở cả 2 dự án, đưa custom tooltip với portal vào file này
+sửa lại tooltip cho tabs tối đa 2 dòng, nếu dài hơn thì dùng truncate ...
+
+phần tooltip nhảy ra rất giật, hãy sửa cho hiển thị mượt dùng class duration-200 của tailwind, đồng bộ màu tooltip với theme hệ thống, 
+sửa phần toaster cũng duration-200 cho chuyển động mượt mà
