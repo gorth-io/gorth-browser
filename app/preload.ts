@@ -1,0 +1,34 @@
+import { contextBridge } from "electron";
+import { authApi } from "@/preload/api/auth";
+import { portalApi, menuPortalApi } from "@/preload/api/portal";
+import { persistenceApi } from "@/preload/api/database";
+import {
+  appActionsApi,
+  findInPageApi,
+  siteInfoApi,
+  clipboardApi,
+  addressBarMenuApi,
+  tabsApi,
+  browserMenuApi,
+  pageMenuApi,
+  titlebarMenuApi,
+} from "@/preload/api/browser";
+import { windowStateApi } from "@/preload/api/window";
+
+const electronAPI = {
+  auth: authApi,
+  portal: portalApi,
+  menuPortal: menuPortalApi,
+  persistence: persistenceApi,
+  appActions: appActionsApi,
+  findInPage: findInPageApi,
+  siteInfo: siteInfoApi,
+  clipboard: clipboardApi,
+  addressBarMenu: addressBarMenuApi,
+  tabs: tabsApi,
+  browserMenu: browserMenuApi,
+  pageMenu: pageMenuApi,
+  titlebarMenu: titlebarMenuApi,
+  windowState: windowStateApi,
+};
+contextBridge.exposeInMainWorld("electronAPI", electronAPI);
