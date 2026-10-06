@@ -1,6 +1,18 @@
 import { ipcRenderer } from "electron";
-import type { BrowserSnapshot, PersistedTab } from "@/lib/browser/persistence";
+import type {
+  BrowserSnapshot,
+  PersistedTab,
+  PersistedTabGroup,
+} from "@/lib/browser/persistence";
 export const persistenceApi = {
+  saveGroup: (group: PersistedTabGroup) =>
+    ipcRenderer.invoke("tab-groups:save", group) as Promise<
+      PersistedTabGroup[]
+    >,
+  deleteGroup: (id: string) =>
+    ipcRenderer.invoke("tab-groups:delete", id) as Promise<PersistedTabGroup[]>,
+  listGroups: () =>
+    ipcRenderer.invoke("tab-groups:list") as Promise<PersistedTabGroup[]>,
   load: () =>
     ipcRenderer.invoke("persistence:load") as Promise<BrowserSnapshot>,
   save: (snapshot: BrowserSnapshot) =>

@@ -6,6 +6,8 @@ export interface BrowserLayout {
   sidebarWidth: number;
 }
 export interface BrowserTabState {
+  isSleeping?: boolean;
+  navigation?: import("@/lib/browser/persistence").PersistedTab["navigation"];
   errorCode?: number;
   errorDescription?: string;
   errorUrl?: string;
@@ -21,6 +23,10 @@ export interface BrowserTabState {
   internalPage: BrowserInternalPage | null;
 }
 export interface ElectronApi {
+  lifecycle: typeof import("@/preload/api/lifecycle").lifecycleApi;
+  shields: typeof import("@/preload/api/shields").shieldsApi;
+  shortcuts: typeof import("@/preload/api/shortcuts").shortcutsApi;
+  downloads: typeof import("@/preload/api/downloads").downloadsApi;
   auth: typeof import("@/preload/api/auth").authApi;
   portal: typeof import("@/preload/api/portal").portalApi;
   menuPortal: typeof import("@/preload/api/portal").menuPortalApi;

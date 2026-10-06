@@ -45,6 +45,7 @@ function ToastSurface({ position }: { position: ToastPosition }) {
   const { toasts } = useToastManager();
   const [entry, setEntry] =
     useState<ReturnType<NonNullable<typeof pool>["take"]>>(null);
+  const [readyEntryId, setReadyEntryId] = useState<string | null>(null);
   const panel = useRef<HTMLDivElement>(null);
   const active = toasts.length > 0;
   useEffect(() => {
@@ -59,18 +60,41 @@ function ToastSurface({ position }: { position: ToastPosition }) {
   useLayoutEffect(() => {
     if (!entry || entry.window.closed) return;
     const doc = entry.window.document;
-    const sync = () => {
+    let disposed = false;
+    let revision = 0;
+    let frame = 0;
+    const syncTheme = () => {
       doc.documentElement.className = document.documentElement.className;
       doc.documentElement.style.colorScheme =
         document.documentElement.style.colorScheme;
+    };
+    const sync = () => {
+      const current = ++revision;
+      setReadyEntryId(null);
+      syncTheme();
       const base = doc.createElement("base");
       base.href = document.baseURI;
-      doc.head.replaceChildren(
-        base,
-        ...Array.from(
-          document.head.querySelectorAll('style,link[rel="stylesheet"]'),
-        ).map((node) => node.cloneNode(true)),
-      );
+      const sheets = Array.from(
+        document.head.querySelectorAll('style,link[rel="stylesheet"]'),
+      ).map((node) => node.cloneNode(true));
+      const loaded = sheets.flatMap((node) => {
+        if (node.nodeName !== "LINK") return [];
+        return [
+          new Promise<void>((resolve) => {
+            node.addEventListener("load", () => resolve(), { once: true });
+            node.addEventListener("error", () => resolve(), { once: true });
+          }),
+        ];
+      });
+      doc.head.replaceChildren(base, ...sheets);
+      // Copying a stylesheet link does not mean its CSS has loaded in the
+      // new native window. Never show the first unstyled/light frame.
+      void Promise.all(loaded).then(() => {
+        if (disposed || current !== revision) return;
+        frame = requestAnimationFrame(() => {
+          if (!disposed && current === revision) setReadyEntryId(entry.id);
+        });
+      });
     };
     sync();
     const observer = new MutationObserver(sync);
@@ -80,14 +104,20 @@ function ToastSurface({ position }: { position: ToastPosition }) {
       characterData: true,
       attributes: true,
     });
-    observer.observe(document.documentElement, {
+    const theme = new MutationObserver(syncTheme);
+    theme.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ["class", "style"],
     });
-    return () => observer.disconnect();
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      theme.disconnect();
+    };
   }, [entry]);
   useLayoutEffect(() => {
-    if (!entry || !panel.current) return;
+    if (!entry || !panel.current || readyEntryId !== entry.id) return;
     const measure = () => {
       if (entry.window.closed || !panel.current) return;
       const width = Math.min(376, window.innerWidth - 32);
@@ -112,7 +142,7 @@ function ToastSurface({ position }: { position: ToastPosition }) {
       window.removeEventListener("resize", measure);
       window.removeEventListener("focus", measure);
     };
-  }, [entry, position, toasts.length]);
+  }, [entry, readyEntryId, position, toasts.length]);
   if (!entry || entry.window.closed) return null;
   return createPortal(
     <div ref={panel} className="p-2">

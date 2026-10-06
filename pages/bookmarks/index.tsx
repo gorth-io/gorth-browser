@@ -1,25 +1,31 @@
 import { Bookmark } from "lucide-react";
-import type { BrowserBookmark } from "@/components/element/browser-sidebar";
+import type { BrowserBookmark } from "@/components/dashboard/bookmarks";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageShell, EmptyState, LinkActionsPopover } from "@/pages/shared";
+import {
+  TabGroups,
+  type TabGroupsProps,
+} from "@/components/element/tab-groups";
 function BookmarksPage({
   bookmarks,
   onNavigate,
   onOpenInNewTab,
   onRemove,
+  ...groupProps
 }: {
   bookmarks: BrowserBookmark[];
   onNavigate: (url: string) => void;
   onOpenInNewTab: (url: string) => void;
   onRemove: (id: string) => void;
-}) {
+} & TabGroupsProps) {
   return (
     <PageShell
       description="Pages you saved for quick access."
       icon={Bookmark}
       title="Bookmarks"
     >
+      <TabGroups {...groupProps} />
       {bookmarks.length ? (
         <Card>
           <CardContent className="divide-y p-0">

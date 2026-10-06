@@ -11,7 +11,7 @@ import {
 import type {
   BrowserBookmark,
   BrowserSidebarSide,
-} from "@/components/element/browser-sidebar";
+} from "@/components/dashboard/bookmarks";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -22,6 +22,7 @@ import { PortalPanel, type PortalAnchor } from "@/providers/portal";
 import { type BrowserInternalPage } from "@/lib/browser/internal-pages";
 import type { Theme } from "@/lib/theme";
 import { Wrapper } from "@/layouts/wrapper";
+import type { TabGroupsProps } from "@/components/element/tab-groups";
 interface BrowserHistoryItem {
   id: string;
   tabId: string;
@@ -30,7 +31,14 @@ interface BrowserHistoryItem {
   visitedAt: number;
 }
 
-interface SpecialPageProps {
+interface SpecialPageProps extends TabGroupsProps {
+  sleepAfterMinutes: number;
+  archiveAfterDays: number;
+  onSleepAfterMinutesChange: (value: number) => void;
+  onArchiveAfterDaysChange: (value: number) => void;
+  onRestoreArchivedTab: (
+    tab: import("@/lib/browser/persistence").PersistedTab,
+  ) => void;
   errorCode?: number;
   errorDescription?: string;
   errorUrl?: string;

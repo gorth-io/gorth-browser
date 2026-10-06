@@ -1,18 +1,5 @@
-import { Settings } from "lucide-react";
-import {
-  SidebarProvider,
-  Sidebar,
-  SidebarContent,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarSeparator,
-} from "@/components/ui/sidebar";
-import {
-  settingsPagesFirst,
-  settingsPagesSecond,
-} from "@/lib/browser/settings-pages";
+import { SidebarProvider } from "@/components/ui/sidebar";
+import { Dashboard } from "@/layouts/dashboard";
 import type { SpecialPageProps } from "@/pages/shared";
 import { SettingsPage as AppearancePage } from "./appearance";
 import { AboutPage } from "./help";
@@ -31,8 +18,10 @@ import { SettingsSectionPage as Section11 } from "./downloads";
 import { SettingsSectionPage as Section12 } from "./accessibility";
 import { SettingsSectionPage as Section13 } from "./system";
 import { SettingsSectionPage as Section14 } from "./reset";
-import { Card, CardTitle } from "@/components/ui/card";
+
+import { ProfilePage } from "./profile";
 const sections = {
+  "settings/profile": ProfilePage,
   "settings/get-started": Section0,
   "settings/content": Section1,
   "settings/shields": Section2,
@@ -60,42 +49,11 @@ export function SettingsPage(props: SpecialPageProps) {
       onOpenChange={() => {}}
       className="h-full min-h-0 items-stretch overflow-hidden"
     >
-      <Sidebar collapsible="none" className="">
-        <SidebarHeader className="">
-          <Card className="flex flex-row h-14 items-center p-2.5 gap-2.5 rounded-lg ring-0 hover:ring-1 ring-foreground/10 transition-all duration-200 ease-in-out">
-            <div className="flex aspect-square size-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <Settings className="size-4" />
-            </div>
-            <div className="grid flex-1 text-left text-sm leading-tight">
-              <CardTitle>Settings</CardTitle>
-              {/*<span className="truncate font-medium">Settings</span>*/}
-              {/*<span className="truncate text-xs">Gorth</span>*/}
-            </div>
-          </Card>
-        </SidebarHeader>
-        <SidebarContent className="gap-0">
-          {[settingsPagesFirst, settingsPagesSecond].map((item) => (
-            <>
-              <SidebarSeparator className="m-0" />
-              <SidebarMenu className="p-2">
-                {item.map(({ id, title, icon: Icon }) => (
-                  <SidebarMenuItem key={id}>
-                    <SidebarMenuButton
-                      className="h-9 [&>svg]:size-4"
-                      isActive={current === id}
-                      aria-current={current === id ? "page" : undefined}
-                      onClick={() => props.onOpenInternal(id)}
-                    >
-                      <Icon className="size-4" />
-                      <span>{title}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </>
-          ))}
-        </SidebarContent>
-      </Sidebar>
+      <Dashboard
+        variant="settings"
+        page={current}
+        onOpenInternal={props.onOpenInternal}
+      />
       <section
         className="min-w-0 flex-1 overflow-y-auto"
         aria-label="Settings content"
@@ -104,8 +62,10 @@ export function SettingsPage(props: SpecialPageProps) {
           <AppearancePage {...props} />
         ) : current === "settings/help" ? (
           <AboutPage onOpenInternal={props.onOpenInternal} />
+        ) : current === "settings/system" ? (
+          <Section13 {...props} />
         ) : Section ? (
-          <Section />
+          <Section {...props} />
         ) : null}
       </section>
     </SidebarProvider>

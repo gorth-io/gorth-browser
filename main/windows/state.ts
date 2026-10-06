@@ -1,8 +1,8 @@
 import { screen } from "electron";
-import { loadWindowState } from "@/database/client";
+import { loadWindowState } from "@/services/browser-database";
 
-export function getRestoredWindowOptions() {
-  const saved = loadWindowState();
+export function getRestoredWindowOptions(windowId = "main") {
+  const saved = loadWindowState(windowId);
   if (!saved) return { width: 1920, height: 1080, shouldMaximize: false };
   const bounds = {
     x: saved.x ?? 0,

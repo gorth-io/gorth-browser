@@ -54,6 +54,8 @@ interface TabListPortalState {
 }
 
 type TabContextMenuCommand =
+  | "sleep-tab"
+  | "archive-tab"
   | "reload-tab"
   | "toggle-mute-tab"
   | "toggle-pin-tab"
@@ -61,6 +63,7 @@ type TabContextMenuCommand =
   | "close-other-tabs";
 
 interface TabContextPortalState {
+  canSleep: boolean;
   isPinned: boolean;
   canCloseOtherTabs: boolean;
   canReload: boolean;
@@ -78,6 +81,7 @@ type PageContextMenuCommand =
   | "copy-link-address"
   | "open-image-new-tab"
   | "copy-image"
+  | "save-image-as"
   | "copy-image-address"
   | "copy-selection"
   | "undo"

@@ -8,6 +8,7 @@ import {
 } from "@/components/element/browser-tabs";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { PersistedTabGroup } from "@/lib/browser/persistence";
 import {
   getPortalMenuAnchor,
   getPortalMenuTheme,
@@ -15,6 +16,7 @@ import {
 } from "@/lib/browser/browser-menu";
 
 interface TitlebarProps {
+  groups: PersistedTabGroup[];
   activeTabId: string;
   showLogo: boolean;
   tabs: BrowserTabItem[];
@@ -28,6 +30,7 @@ interface TitlebarProps {
 }
 
 function Titlebar({
+  groups,
   activeTabId,
   showLogo,
   tabs,
@@ -120,6 +123,7 @@ function Titlebar({
         )}
 
         <BrowserTabs
+          groups={groups}
           activeTabId={activeTabId}
           tabs={tabs}
           onActivate={onActivateTab}

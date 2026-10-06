@@ -8,7 +8,7 @@ Những tính năng Flow có nhưng Gorth chưa có
 | Incognito | Cửa sổ riêng tư với session riêng | Chưa có |
 | Profiles | Nhiều profile, session và extension riêng | Chưa có |
 | Spaces | Không gian làm việc riêng, chuyển space | Chưa có |
-| Tab groups | Nhóm tab dạng normal, split và glance | Chỉ có split hai tab đơn giản |
+|---| Tab groups | Nhóm tab dạng normal, split và glance | Chỉ có split hai tab đơn giản |
 | Kéo thả tab | Sắp xếp tab, nhóm tab và pinned tab bằng drag-and-drop | Chưa có |
 | Tab sleeping | Tự ngủ tab sau khoảng thời gian cấu hình | Chưa có |
 | Tab archive | Tự archive tab cũ | Chưa có |
@@ -27,7 +27,7 @@ Những tính năng Flow có nhưng Gorth chưa có
 | Auto update | Kiểm tra, tải và cài bản cập nhật | Chưa có |
 | Default browser | Kiểm tra và đặt làm trình duyệt mặc định | Chưa có |
 | Onboarding | Quy trình thiết lập lần đầu | Chưa có |
-| Custom shortcuts | Danh sách, chỉnh sửa và reset phím tắt | Chưa có hệ thống shortcut |
+|---| Custom shortcuts | Danh sách, chỉnh sửa và reset phím tắt | Chưa có hệ thống shortcut |
 |---| Native app menu | Menu File/Edit/View/Tabs/Spaces/Window | Chưa có menu ứng dụng hoàn chỉnh |
 |---| Database | SQLite + Drizzle cho lịch sử, settings, tabs, profiles | Dùng `localStorage` |
 |---| Error/offline pages | Trang lỗi và các game offline | Chưa có |
@@ -70,3 +70,61 @@ sửa lại tooltip cho tabs tối đa 2 dòng, nếu dài hơn thì dùng trunc
 
 phần tooltip nhảy ra rất giật, hãy sửa cho hiển thị mượt dùng class duration-200 của tailwind, đồng bộ màu tooltip với theme hệ thống, 
 sửa phần toaster cũng duration-200 cho chuyển động mượt mà
+
+sửa lại nút download trên addressbar khi bấm hiển thị portal menu như browser menu các file download gần đây, chiều cao của popup này gồm 4 nút h-9 và 1 nút h-9 show all, tất cả gap-1, có Separator giữa 4 nút trên và 1 nút dưới, nút cuối cùng là show all sẽ chuyển đến trang gorth://downloads như hiện tại
+thêm tuỳ chọn save image as khi chuột phải vào image ở browser content
+
+sửa lại toast khi lần đầu mở ra bị nháy sáng khi ở giao diện tối mặc định os
+
+sửa lại 2 desktop app này khi bấm about trên menu bar của os sẽ chuyển đến gorth://settings/help thay vì mở cửa sổ about electron như hiện tại
+
+thêm tính năng shortcuts ở cả 2 app browser và launcher, trang gorth://shortcuts 
+Custom shortcuts | Danh sách, chỉnh sửa và reset phím tắt
+thêm tính năng mở lại cửa tab vừa tắt cmd + shift + t, đưa phím này vào shortcuts
+
+
+triển khai tính năng Adblock/tracker blocker tham khảo engine block tracker adblock mạnh như brave hay cốc cốc
+triển khai tính năng Extensions của chrome web store
+
+
+
+
+
+
+
+Gorth đã vượt xa mẫu my-browser và có nhiều chức năng nền tảng tương đương Flow. Phần còn thiếu chủ yếu là quản lý phiên nâng cao, tích hợp website và quản lý tài nguyên — không chỉ giao diện.
+Bảng trong sitemap.txt hiện đã lỗi thời: SQLite, khôi phục phiên, recently closed, download manager, find-in-page, fullscreen web, nhóm tab và shortcuts đã được triển khai.
+
+| Nhóm | Gorth hiện tại | So với các mẫu |
+|---|---|---|
+| Database và session | SQLite + Drizzle; lưu tab, nhóm, bookmarks, history, vị trí cửa sổ | Đã có nền tảng tương tự Flow |
+| Recently closed | Khôi phục tab bằng `Cmd/Ctrl+Shift+T` | Đã có |
+| Shortcuts | Danh sách, sửa, kiểm tra trùng, reset; lưu SQLite | Đã có |
+| Downloads | Theo dõi tải, pause/resume, cancel/retry, lịch sử, chọn vị trí lưu | Đã có chức năng thực, không còn placeholder |
+| Nhóm tab | Normal, split, glance; lưu DB và hiện trong Bookmarks | Flow có quản lý nhóm và tương tác phong phú hơn |
+| Nhiều cửa sổ | Có New Window | Chưa tách dữ liệu tab/session theo từng cửa sổ |
+| Incognito, profiles, spaces | Chưa có cơ chế hoàn chỉnh | Flow có profiles/spaces; Wexond có session incognito riêng |
+| Kéo thả tab | Chưa thấy triển khai sắp xếp/chuyển nhóm bằng drag-and-drop | Flow có xử lý kéo thả |
+| Tab sleeping/archive | Chưa có vòng đời ngủ/thức/archive | Flow có |
+| Omnibox | Nhập URL hoặc Google search | Flow có history suggestions, open tabs, search suggestions, commands và bangs |
+| Adblock/tracker blocker | Trang Shields còn placeholder | Flow và Wexond có blocker thực |
+| Extensions | Trang quản lý còn placeholder | Flow có load/unload và quản lý extension; Wexond có tích hợp nhưng phụ thuộc cấu hình |
+| Quyền website và HTTP auth | Chưa thấy hệ thống quản lý/prompt riêng | Wexond có prompt và lưu quyền; Flow có handler nhưng một số quyền vẫn được tự cho phép |
+| PDF, passkeys, DRM | Chưa có PDF viewer riêng hay tích hợp passkeys/DRM tương đương | Flow có PDF viewer, WebAuthn và dùng Electron Castlabs |
+| Auto update/default browser | Chưa thấy triển khai | Flow có; Wexond có updater |
+| Settings | Appearance/downloads hoạt động; nhiều mục còn placeholder | Privacy, Shields, Sync, Autofill… chưa tương ứng với tính năng thực |
+
+
+Ba điểm cần chú ý trước khi mở rộng — đã xử lý 2026-10-04
+1. Tab, group, recently closed và window bounds đã tách theo window_id. Bookmark/history lưu delta, không thay toàn bộ dữ liệu chung bởi snapshot của một cửa sổ.
+2. window.open()/target=_blank yêu cầu mở tab mới, không điều hướng tab nguồn. Chỉ chấp nhận HTTP(S) và URL gorth:// hợp lệ.
+3. memorySaver điều khiển vòng đời ngủ/thức thật; smoothScrolling điều khiển Chromium sau khi restart app. Shields đã có Ghostery full engine. Extensions và các settings ngoài phạm vi vẫn được ghi rõ là chưa hỗ trợ.
+Tab sleeping/archive: gorth://settings/system và gorth://archive. Mặc định ngủ sau 15 phút, tự archive tắt (0 ngày). Giữ navigation history khi ngủ/thức; bảo vệ active/pinned/group/media/download/form tabs.
+Adblock/tracker blocker: gorth://settings/shields, full filter lists đóng gói để dùng offline, cập nhật cache, site exceptions và custom filters.
+Launcher: createWindow tái sử dụng cửa sổ chính, giữ single-instance và webview allowlist riêng; không thêm browser flags/tab lifecycle vào launcher.
+Chi tiết và test: docs/tab-lifecycle-and-shields.md.
+Nên tham khảo mẫu nào?
+- Flow: phù hợp nhất cho profiles, spaces, tab lifecycle, omnibox, nhóm tab và extensions.
+- Wexond: hữu ích cho luồng quyền website, HTTP auth và autofill; không nên sao chép nguyên kiến trúc bảo mật. Mẫu này dùng Electron 13 và có cửa sổ giao diện bật nodeIntegration, tắt contextIsolation. Xem [windows/app.ts (line 29)](/Users/macbook/Projects/JetBrains/WebstormProjects/gorth-browser/packages/wexond-browser/src/main/windows/app.ts:29).
+- my-browser: chủ yếu là scaffold Electron Forge/Vite, chưa phải browser đầy đủ.
+Ưu tiên tiếp theo của Gorth nên là: tách session theo cửa sổ → sửa mở tab từ website → quyền website/HTTP auth → omnibox → incognito/profiles → tab sleeping và blocker.

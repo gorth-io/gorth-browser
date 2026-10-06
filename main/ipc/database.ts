@@ -1,17 +1,76 @@
 import { ipcMain } from "electron";
+import { z } from "zod";
 import {
   addRecentlyClosedTab,
   loadBrowserSnapshot,
   popRecentlyClosedTab,
   saveBrowserSnapshot,
-} from "@/database/client";
+  saveTabGroup,
+  deleteTabGroup,
+  loadTabGroups,
+} from "@/services/browser-database";
 import type { BrowserSnapshot, PersistedTab } from "@/lib/browser/persistence";
-import { getWindowFromSender } from "@/main/windows/capital";
+import { getWindowFromSender, getBrowserState } from "@/main/windows/capital";
+import {
+  restoreTabSession,
+  synchronizeTabSession,
+  captureTabNavigation,
+} from "@/main/services/tab-lifecycle";
+import {
+  browserSnapshotSchema,
+  persistedTabSchema,
+} from "@/lib/browser/session-schema";
 
 export function registerDatabaseIpc() {
-  ipcMain.handle("persistence:load", () => loadBrowserSnapshot());
-  ipcMain.handle("persistence:save", (_event, snapshot: BrowserSnapshot) => {
-    saveBrowserSnapshot(snapshot);
+  const groupSchema = z
+    .object({
+      id: z.string().min(1).max(128),
+      name: z.string().trim().min(1).max(80),
+      mode: z.enum(["normal", "split", "glance"]),
+      tabIds: z.array(z.string().min(1).max(128)).min(1).max(500),
+    })
+    .refine(
+      (group) => new Set(group.tabIds).size === group.tabIds.length,
+      "Duplicate group members.",
+    )
+    .refine(
+      (group) => group.mode === "normal" || group.tabIds.length === 2,
+      "Split and glance groups require exactly two tabs.",
+    );
+  const requireAppSender = (sender: Electron.WebContents) => {
+    const window = getWindowFromSender(sender);
+    if (!window || window.webContents !== sender)
+      throw new Error("Untrusted group request.");
+    return getBrowserState(window).sessionId;
+  };
+  ipcMain.handle("tab-groups:save", (event, input: unknown) => {
+    return saveTabGroup(
+      groupSchema.parse(input),
+      requireAppSender(event.sender),
+    );
+  });
+  ipcMain.handle("tab-groups:delete", (event, input: unknown) => {
+    return deleteTabGroup(
+      z.string().min(1).max(128).parse(input),
+      requireAppSender(event.sender),
+    );
+  });
+  ipcMain.handle("tab-groups:list", (event) => {
+    return loadTabGroups(requireAppSender(event.sender));
+  });
+  ipcMain.handle("persistence:load", (event) => {
+    const windowId = requireAppSender(event.sender);
+    return restoreTabSession(
+      getWindowFromSender(event.sender)!,
+      loadBrowserSnapshot(windowId),
+    );
+  });
+  ipcMain.handle("persistence:save", (event, snapshot: BrowserSnapshot) => {
+    snapshot = browserSnapshotSchema.parse(snapshot);
+    const windowId = requireAppSender(event.sender);
+    const window = getWindowFromSender(event.sender)!;
+    synchronizeTabSession(window, snapshot);
+    saveBrowserSnapshot(snapshot, windowId);
   });
   ipcMain.on("persistence:flush", (event, snapshot: BrowserSnapshot) => {
     try {
@@ -20,7 +79,9 @@ export function registerDatabaseIpc() {
         event.returnValue = false;
         return;
       }
-      saveBrowserSnapshot(snapshot);
+      snapshot = browserSnapshotSchema.parse(snapshot);
+      synchronizeTabSession(window, snapshot);
+      saveBrowserSnapshot(snapshot, requireAppSender(event.sender));
       event.returnValue = true;
     } catch (error) {
       console.error(
@@ -30,8 +91,19 @@ export function registerDatabaseIpc() {
       event.returnValue = false;
     }
   });
-  ipcMain.handle("persistence:close-tab", (_event, tab: PersistedTab) => {
-    addRecentlyClosedTab(tab);
+  ipcMain.handle("persistence:close-tab", (event, tab: PersistedTab) => {
+    tab = persistedTabSchema.parse(tab);
+    const windowId = requireAppSender(event.sender);
+    const runtime = captureTabNavigation(
+      getWindowFromSender(event.sender)!,
+      tab.id,
+    );
+    addRecentlyClosedTab(
+      { ...tab, navigation: runtime?.navigation ?? tab.navigation },
+      windowId,
+    );
   });
-  ipcMain.handle("persistence:reopen-closed-tab", () => popRecentlyClosedTab());
+  ipcMain.handle("persistence:reopen-closed-tab", (event) =>
+    popRecentlyClosedTab(requireAppSender(event.sender)),
+  );
 }

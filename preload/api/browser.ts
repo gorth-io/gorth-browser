@@ -84,7 +84,10 @@ export const tabsApi = {
   stop: (tabId: string) => ipcRenderer.send("tabs:stop", tabId),
   setMuted: (tabId: string, muted: boolean) =>
     ipcRenderer.send("tabs:set-muted", tabId, muted),
-  setSplit: (tabId: string | null) => ipcRenderer.send("tabs:set-split", tabId),
+  setPinned: (tabId: string, pinned: boolean) =>
+    ipcRenderer.send("tabs:set-pinned", tabId, pinned),
+  setSplit: (tabId: string | null, mode: "split" | "glance" = "split") =>
+    ipcRenderer.send("tabs:set-split", tabId, mode),
   close: (tabId: string) => ipcRenderer.send("tabs:close", tabId),
   openContextMenu: (
     title: string,
@@ -94,6 +97,7 @@ export const tabsApi = {
     canCloseOtherTabs: boolean,
     anchor: PortalMenuAnchor,
     theme: PortalMenuTheme,
+    canSleep = false,
   ) =>
     ipcRenderer.invoke(
       "tab-context-menu:open",
@@ -104,6 +108,7 @@ export const tabsApi = {
       canCloseOtherTabs,
       anchor,
       theme,
+      canSleep,
     ) as Promise<string | null>,
   openListMenu: (
     activeTabId: string,

@@ -17,7 +17,7 @@ export function AccountCard() {
         <CardDescription>
           {state?.user
             ? state.user.name
-            : "Sign in securely through Gorth SSO in your system browser."}
+            : "Đăng nhập hoặc đăng ký Gorth SSO ngay trong cửa sổ này."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -37,7 +37,8 @@ export function AccountCard() {
         )}
         {state && !state.configured && (
           <p className="text-sm text-muted-foreground">
-            Configure VITE_GORTH_SSO_ISSUER to enable sign-in.
+            Configure VITE_SSO_CLIENT_URL, VITE_SSO_OAUTH_CLIENT_ID and
+            VITE_APP_URL to enable sign-in.
           </p>
         )}
         {state?.locked && (
@@ -52,6 +53,16 @@ export function AccountCard() {
           >
             {state?.user ? "Switch Gorth account" : "Sign in with Gorth"}
           </Button>
+          {!state?.user && (
+            <Button
+              className="h-9"
+              variant="outline"
+              disabled={busy || !state?.configured}
+              onClick={() => void run("register")}
+            >
+              Đăng ký Gorth
+            </Button>
+          )}
           {state?.user && (
             <>
               <Button

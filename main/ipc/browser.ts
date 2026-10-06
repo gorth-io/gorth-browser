@@ -1,6 +1,12 @@
 import { destroyWebview } from "@/main/windows/webview";
+import {
+  registerAuthTabHost,
+  isAuthTab,
+  cancelAuthTab,
+} from "@/main/services/auth-view";
 import { ipcMain } from "electron";
 import { parseInternalPage } from "@/lib/browser/internal-pages";
+import { wakeTab } from "@/main/services/tab-lifecycle";
 import {
   type BrowserLayout,
   getWindowFromSender,
@@ -16,6 +22,20 @@ import {
 } from "@/main/windows/capital";
 
 export function registerBrowserIpc() {
+  registerAuthTabHost((window, id, view) => {
+    const state = getBrowserState(window);
+    state.internalPages.delete(id);
+    state.views.set(id, { view, transientAuth: true });
+    state.activeTabId = id;
+    state.splitTabId = null;
+    if (state.webFullScreenTabId)
+      setWebFullScreen(window, state.webFullScreenTabId, false);
+    updateViewBounds(window);
+    return () => {
+      state.views.delete(id);
+      if (!window.isDestroyed()) showInternalPage(window, id, "auth");
+    };
+  });
   ipcMain.on("tabs:set-layout", (event, layout: BrowserLayout) => {
     const window = getWindowFromSender(event.sender);
 
@@ -129,7 +149,12 @@ export function registerBrowserIpc() {
     }
 
     const state = getBrowserState(window);
+    const previous = state.tabMetadata.get(state.activeTabId ?? "");
+    if (previous) previous.lastActiveAt = Date.now();
     state.activeTabId = tabId;
+    if (state.tabMetadata.has(tabId))
+      state.tabMetadata.get(tabId)!.lastActiveAt = Date.now();
+    void wakeTab(window, tabId);
 
     if (state.splitTabId === tabId) {
       state.splitTabId = null;
@@ -145,6 +170,9 @@ export function registerBrowserIpc() {
       return false;
     }
 
+    // loadURL does not emit will-navigate: never bypass the SSO view's allowlist.
+    if (isAuthTab(window, tabId)) cancelAuthTab(window, tabId);
+
     if (internalPage) {
       showInternalPage(window, tabId, internalPage);
       return true;
@@ -153,6 +181,14 @@ export function registerBrowserIpc() {
     if (!isAllowedNavigationUrl(url)) return false;
 
     const state = getBrowserState(window);
+    state.archivedTabIds.delete(tabId);
+    const tab = state.tabMetadata.get(tabId);
+    if (tab) {
+      tab.isSleeping = false;
+      tab.url = url;
+      tab.internalPage = null;
+      tab.navigation = undefined;
+    }
     const record = createTabView(window, tabId);
     state.internalPages.delete(tabId);
     state.activeTabId = tabId;
@@ -181,11 +217,18 @@ export function registerBrowserIpc() {
       return;
     }
 
+    cancelAuthTab(window, tabId);
     showInternalPage(window, tabId, "new-tab");
   });
   ipcMain.on("tabs:back", (event, tabId: string) => {
     const result = getTabRecord(event.sender, tabId);
     const window = getWindowFromSender(event.sender);
+
+    if (window && isAuthTab(window, tabId)) {
+      cancelAuthTab(window, tabId);
+      showInternalPage(window, tabId, "settings/profile");
+      return;
+    }
 
     if (window && getBrowserState(window).internalPages.has(tabId)) {
       showInternalPage(window, tabId, "new-tab");
@@ -211,11 +254,19 @@ export function registerBrowserIpc() {
   ipcMain.on("tabs:reload", (event, tabId: string) => {
     const window = getWindowFromSender(event.sender);
     if (window && getBrowserState(window).internalPages.has(tabId)) return;
+    if (window && getBrowserState(window).tabMetadata.get(tabId)?.isSleeping) {
+      void wakeTab(window, tabId);
+      return;
+    }
     getTabRecord(event.sender, tabId)?.record?.view.webContents.reload();
   });
   ipcMain.on("tabs:force-reload", (event, tabId: string) => {
     const window = getWindowFromSender(event.sender);
     if (window && getBrowserState(window).internalPages.has(tabId)) return;
+    if (window && getBrowserState(window).tabMetadata.get(tabId)?.isSleeping) {
+      void wakeTab(window, tabId);
+      return;
+    }
     getTabRecord(
       event.sender,
       tabId,
@@ -227,23 +278,36 @@ export function registerBrowserIpc() {
   ipcMain.on("tabs:set-muted", (event, tabId: string, muted: boolean) => {
     const window = getWindowFromSender(event.sender);
     if (!window) return;
+    const metadata = getBrowserState(window).tabMetadata.get(tabId);
+    if (metadata) metadata.isMuted = Boolean(muted);
 
     getBrowserState(window)
       .views.get(tabId)
       ?.view.webContents.setAudioMuted(Boolean(muted));
     sendTabUpdate(window, { id: tabId, isMuted: Boolean(muted) });
   });
-  ipcMain.on("tabs:set-split", (event, tabId: string | null) => {
+  ipcMain.on("tabs:set-pinned", (event, tabId: string, pinned: boolean) => {
     const window = getWindowFromSender(event.sender);
-
-    if (!window) {
-      return;
-    }
-
-    const state = getBrowserState(window);
-    state.splitTabId = tabId === state.activeTabId ? null : tabId;
-    updateViewBounds(window);
+    if (!window) return;
+    const metadata = getBrowserState(window).tabMetadata.get(tabId);
+    if (metadata) metadata.isPinned = Boolean(pinned);
   });
+  ipcMain.on(
+    "tabs:set-split",
+    (event, tabId: string | null, mode: unknown = "split") => {
+      const window = getWindowFromSender(event.sender);
+
+      if (!window) {
+        return;
+      }
+
+      const state = getBrowserState(window);
+      state.companionMode = mode === "glance" ? "glance" : "split";
+      state.splitTabId = tabId === state.activeTabId ? null : tabId;
+      if (state.splitTabId) void wakeTab(window, state.splitTabId);
+      updateViewBounds(window);
+    },
+  );
   ipcMain.on("tabs:close", (event, tabId: string) => {
     const window = getWindowFromSender(event.sender);
 
@@ -251,6 +315,7 @@ export function registerBrowserIpc() {
       return;
     }
 
+    cancelAuthTab(window, tabId);
     const state = getBrowserState(window);
     const record = state.views.get(tabId);
 
@@ -264,6 +329,7 @@ export function registerBrowserIpc() {
     }
 
     state.internalPages.delete(tabId);
+    state.tabMetadata.delete(tabId);
 
     if (state.splitTabId === tabId) {
       state.splitTabId = null;

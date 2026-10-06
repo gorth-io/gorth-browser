@@ -16,9 +16,16 @@ import {
   Settings,
   RotateCcw,
   Info,
+  UserRound,
 } from "lucide-react";
 
 export const settingsPagesFirst = [
+  {
+    id: "settings/profile",
+    title: "Profile",
+    icon: UserRound,
+    description: "Manage your Gorth account.",
+  },
   {
     id: "settings/get-started",
     title: "Get started",

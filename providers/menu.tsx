@@ -33,6 +33,8 @@ import {
   Volume2,
   VolumeX,
   X,
+  Moon,
+  Archive,
 } from "lucide-react";
 
 import {
@@ -212,6 +214,19 @@ function TabContextItems({ state }: { state: TabContextPortalState }) {
       >
         <X /> Close other tabs
       </PopoverMenuItem>
+      <PopoverMenuSeparator />
+      <PopoverMenuItem
+        disabled={!state.canSleep}
+        onClick={() => select("sleep-tab")}
+      >
+        <Moon /> Sleep tab
+      </PopoverMenuItem>
+      <PopoverMenuItem
+        disabled={!state.canSleep}
+        onClick={() => select("archive-tab")}
+      >
+        <Archive /> Archive tab
+      </PopoverMenuItem>
     </>
   );
 }
@@ -247,6 +262,12 @@ function PageContextItems({ state }: { state: PageContextPortalState }) {
           </PopoverMenuItem>
           <PopoverMenuItem onClick={() => select("copy-image")}>
             <ImageIcon /> Copy image
+          </PopoverMenuItem>
+          <PopoverMenuItem
+            disabled={!/^(https?:|data:|blob:)/i.test(state.imageUrl)}
+            onClick={() => select("save-image-as")}
+          >
+            <Download /> Save image as
           </PopoverMenuItem>
           <PopoverMenuItem onClick={() => select("copy-image-address")}>
             <Link2 /> Copy image address

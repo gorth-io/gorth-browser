@@ -1,3 +1,4 @@
+import { appUrl } from "@/lib/utils/environment";
 import { installPortal } from "@/main/windows/portal";
 import {
   createWebview,
@@ -8,7 +9,7 @@ import {
 import { app, BrowserWindow, nativeTheme, type WebContents } from "electron";
 import path from "node:path";
 import { parseHttpUrl } from "@/lib/utils/schema";
-import { saveWindowState } from "@/database/client";
+import { saveWindowState, setWindowOpen } from "@/services/browser-database";
 import {
   getInternalPageTitle,
   getInternalPageUrl,
@@ -20,12 +21,28 @@ import {
   showPageContextMenu,
 } from "@/main/ipc/context-menu";
 import { getRestoredWindowOptions } from "@/main/windows/state";
+import {
+  defaultBrowserPreferences,
+  type BrowserPreferences,
+  type PersistedTab,
+} from "@/lib/browser/persistence";
+import {
+  captureTabNavigation,
+  trackTabLifecycle,
+} from "@/main/services/tab-lifecycle";
+import { registerBlockerContents } from "@/main/services/content-blocker";
 
 export type BrowserLayout = WebviewLayout;
 
 type TabViewRecord = WebviewRecord;
 
 interface BrowserState {
+  preferences: BrowserPreferences;
+  tabMetadata: Map<string, PersistedTab>;
+  groupedTabIds: Set<string>;
+  archivedTabIds: Set<string>;
+  sessionId: string;
+  companionMode: "split" | "glance";
   activeTabId: string | null;
   internalPages: Map<string, BrowserInternalPage>;
   layout: BrowserLayout;
@@ -36,6 +53,8 @@ interface BrowserState {
 }
 
 interface TabUpdate {
+  isSleeping?: boolean;
+  navigation?: PersistedTab["navigation"];
   errorCode?: number;
   errorDescription?: string;
   errorUrl?: string;
@@ -53,12 +72,23 @@ interface TabUpdate {
 
 const browserStates = new Map<number, BrowserState>();
 
+export function getBrowserWindows(): BrowserWindow[] {
+  return [...browserStates.keys()]
+    .map((id) => BrowserWindow.fromId(id))
+    .filter((window): window is BrowserWindow =>
+      Boolean(window && !window.isDestroyed()),
+    );
+}
+
 export const APP_ID = "com.gorth.browser";
 
 export const APP_NAME = "Gorth Browser";
 
 export function getWindowFromSender(sender: WebContents) {
-  return BrowserWindow.fromWebContents(sender);
+  const window = BrowserWindow.fromWebContents(sender);
+  return window && window.webContents === sender && browserStates.has(window.id)
+    ? window
+    : null;
 }
 
 export function getRuntimeAppIconPath() {
@@ -72,6 +102,12 @@ export function getBrowserState(window: BrowserWindow) {
 
   if (!state) {
     state = {
+      preferences: defaultBrowserPreferences,
+      tabMetadata: new Map(),
+      groupedTabIds: new Set(),
+      archivedTabIds: new Set(),
+      sessionId: crypto.randomUUID(),
+      companionMode: "split",
       activeTabId: null,
       internalPages: new Map(),
       splitTabId: null,
@@ -123,7 +159,15 @@ export function showInternalPage(
   page: BrowserInternalPage,
 ) {
   const state = getBrowserState(window);
+  const previous = state.tabMetadata.get(state.activeTabId ?? "");
+  if (previous) previous.lastActiveAt = Date.now();
   state.activeTabId = tabId;
+  const metadata = state.tabMetadata.get(tabId);
+  if (metadata) {
+    metadata.internalPage = page;
+    metadata.isSleeping = false;
+    metadata.lastActiveAt = Date.now();
+  }
   state.internalPages.set(tabId, page);
   state.views.get(tabId)?.view.webContents.setAudioMuted(false);
   sendTabUpdate(window, {
@@ -149,7 +193,6 @@ export function showErrorPage(
   errorDescription: string,
 ) {
   const state = getBrowserState(window);
-  state.activeTabId = tabId;
   state.internalPages.set(tabId, "error");
   sendTabUpdate(window, {
     id: tabId,
@@ -192,6 +235,7 @@ export function setWebFullScreen(
 export function updateViewBounds(window: BrowserWindow) {
   const state = getBrowserState(window);
   updateWebviewBounds(window, {
+    companionMode: state.companionMode,
     activeTabId: state.activeTabId,
     internalTabIds: state.internalPages,
     layout: state.layout,
@@ -211,6 +255,7 @@ export function createTabView(window: BrowserWindow, tabId: string) {
 
   const record = createWebview(window);
   const { view } = record;
+  registerBlockerContents(view.webContents);
   state.views.set(tabId, record);
 
   view.webContents.on("did-start-loading", () => {
@@ -221,6 +266,7 @@ export function createTabView(window: BrowserWindow, tabId: string) {
     if (getBrowserState(window).internalPages.has(tabId)) return;
     sendTabUpdate(window, { id: tabId, isLoading: false });
     sendNavigationState(window, tabId, record);
+    captureTabNavigation(window, tabId);
   });
   view.webContents.on(
     "did-fail-load",
@@ -294,11 +340,11 @@ export function createTabView(window: BrowserWindow, tabId: string) {
   });
   view.webContents.setWindowOpenHandler(({ url }) => {
     const internalPage = parseInternalPage(url);
-    if (internalPage) {
-      showInternalPage(window, tabId, internalPage);
-    } else if (isAllowedNavigationUrl(url)) {
-      void view.webContents.loadURL(url);
-    }
+    if (
+      (internalPage || isAllowedNavigationUrl(url)) &&
+      !window.webContents.isDestroyed()
+    )
+      window.webContents.send("tabs:open-requested", url);
     return { action: "deny" };
   });
 
@@ -327,8 +373,13 @@ export function isAllowedNavigationUrl(value: string) {
   }
 }
 
-export const createWindow = () => {
-  const restored = getRestoredWindowOptions();
+let quitting = false;
+app.on("before-quit", () => {
+  quitting = true;
+});
+
+export const createWindow = (sessionId: string = crypto.randomUUID()) => {
+  const restored = getRestoredWindowOptions(sessionId);
   const mainWindow = new BrowserWindow({
     show: false,
     title: APP_NAME,
@@ -358,6 +409,14 @@ export const createWindow = () => {
     },
   });
 
+  mainWindow.webContents.on("will-navigate", (event, destination) => {
+    try {
+      const renderer = new URL(appUrl || MAIN_WINDOW_VITE_DEV_SERVER_URL);
+      if (new URL(destination).origin !== renderer.origin) event.preventDefault();
+    } catch {
+      event.preventDefault();
+    }
+  });
   installPortal(mainWindow);
   mainWindow.webContents.on(
     "did-start-navigation",
@@ -366,6 +425,12 @@ export const createWindow = () => {
     },
   );
   browserStates.set(mainWindow.id, {
+    preferences: defaultBrowserPreferences,
+    tabMetadata: new Map(),
+    groupedTabIds: new Set(),
+    archivedTabIds: new Set(),
+    sessionId,
+    companionMode: "split",
     activeTabId: null,
     internalPages: new Map(),
     splitTabId: null,
@@ -379,6 +444,7 @@ export const createWindow = () => {
     webFullScreenTabId: null,
     wasFullScreenBeforeWeb: false,
   });
+  trackTabLifecycle(mainWindow);
 
   const notifyFullScreenChanged = () => {
     if (!mainWindow.webContents.isDestroyed()) {
@@ -395,7 +461,10 @@ export const createWindow = () => {
     if (saveWindowTimer) clearTimeout(saveWindowTimer);
     saveWindowTimer = setTimeout(() => {
       const bounds = mainWindow.getNormalBounds();
-      saveWindowState({ ...bounds, isMaximized: mainWindow.isMaximized() });
+      saveWindowState(
+        { ...bounds, isMaximized: mainWindow.isMaximized() },
+        sessionId,
+      );
     }, 250);
   };
   mainWindow.on("resize", () => {
@@ -410,21 +479,34 @@ export const createWindow = () => {
     dismissPortalMenuForParent(mainWindow);
     if (saveWindowTimer) clearTimeout(saveWindowTimer);
     const bounds = mainWindow.getNormalBounds();
-    saveWindowState({ ...bounds, isMaximized: mainWindow.isMaximized() });
+    saveWindowState(
+      { ...bounds, isMaximized: mainWindow.isMaximized() },
+      sessionId,
+    );
+    setWindowOpen(sessionId, quitting || getBrowserWindows().length === 1);
   });
   mainWindow.on("enter-full-screen", notifyFullScreenChanged);
   mainWindow.on("leave-full-screen", notifyFullScreenChanged);
   mainWindow.on("closed", () => {
+    for (const record of getBrowserState(mainWindow).views.values()) {
+      if (!record.view.webContents.isDestroyed())
+        record.view.webContents.close({ waitForBeforeUnload: false });
+    }
     browserStates.delete(mainWindow.id);
   });
   mainWindow.once("ready-to-show", () => {
+    saveWindowState(
+      { ...mainWindow.getNormalBounds(), isMaximized: restored.shouldMaximize },
+      sessionId,
+    );
+    setWindowOpen(sessionId, true);
     if (restored.shouldMaximize) mainWindow.maximize();
     mainWindow.show();
   });
 
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+  if (MAIN_WINDOW_VITE_DEV_SERVER_URL || appUrl) {
     void mainWindow.loadURL(
-      new URL("assets/index.html", MAIN_WINDOW_VITE_DEV_SERVER_URL).href,
+      new URL("assets/index.html", appUrl || MAIN_WINDOW_VITE_DEV_SERVER_URL).href,
     );
   } else {
     void mainWindow.loadFile(

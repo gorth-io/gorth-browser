@@ -1,4 +1,5 @@
 import { contextBridge } from "electron";
+import { shortcutsApi } from "@/preload/api/shortcuts";
 import { authApi } from "@/preload/api/auth";
 import { portalApi, menuPortalApi } from "@/preload/api/portal";
 import { persistenceApi } from "@/preload/api/database";
@@ -14,8 +15,15 @@ import {
   titlebarMenuApi,
 } from "@/preload/api/browser";
 import { windowStateApi } from "@/preload/api/window";
+import { downloadsApi } from "@/preload/api/downloads";
+import { lifecycleApi } from "@/preload/api/lifecycle";
+import { shieldsApi } from "@/preload/api/shields";
 
 const electronAPI = {
+  lifecycle: lifecycleApi,
+  shields: shieldsApi,
+  shortcuts: shortcutsApi,
+  downloads: downloadsApi,
   auth: authApi,
   portal: portalApi,
   menuPortal: menuPortalApi,

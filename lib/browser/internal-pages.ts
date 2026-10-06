@@ -7,6 +7,9 @@ interface InternalPageDefinition {
 }
 
 const internalPageDefinitions = {
+  auth: { title: "Gorth Account", url: "gorth://auth" },
+  archive: { title: "Archived tabs", url: "gorth://archive" },
+  shortcuts: { title: "Keyboard shortcuts", url: "gorth://shortcuts" },
   help: { title: "Help", url: "gorth://help" },
   welcome: { title: "Welcome to Gorth", url: "gorth://welcome" },
   "whats-new": { title: "What's new", url: "gorth://whats-new" },

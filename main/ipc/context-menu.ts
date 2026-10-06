@@ -24,6 +24,7 @@ import {
   getBrowserState,
   isAllowedNavigationUrl,
 } from "@/main/windows/capital";
+import { saveImageAs } from "@/main/services/downloads";
 
 interface MenuRequest {
   id: number;
@@ -58,6 +59,8 @@ const browserMenuCommands = new Set<BrowserMenuCommand>([
 ]);
 
 const tabContextMenuCommands = new Set<TabContextMenuCommand>([
+  "sleep-tab",
+  "archive-tab",
   "toggle-pin-tab",
   "reload-tab",
   "toggle-mute-tab",
@@ -73,6 +76,7 @@ const pageContextMenuCommands = new Set<PageContextMenuCommand>([
   "copy-link-address",
   "open-image-new-tab",
   "copy-image",
+  "save-image-as",
   "copy-image-address",
   "copy-selection",
   "undo",
@@ -223,6 +227,9 @@ export async function showPageContextMenu(
       break;
     case "copy-image":
       target.copyImageAt(inspectPoint.x, inspectPoint.y);
+      break;
+    case "save-image-as":
+      if (imageUrl) saveImageAs(target, imageUrl);
       break;
     case "copy-image-address":
       if (imageUrl) clipboard.writeText(imageUrl);
@@ -396,6 +403,7 @@ export function registerContextMenuIpc() {
       canCloseOtherTabs: boolean,
       anchor: PortalMenuAnchor,
       theme: PortalMenuTheme,
+      canSleep = false,
     ) => {
       const window = getWindowFromSender(event.sender);
       if (!window) return null;
@@ -408,6 +416,7 @@ export function registerContextMenuIpc() {
           isMuted,
           isPinned,
           kind: "tab-context",
+          canSleep: Boolean(canSleep && canReload && !isPinned),
           theme: theme === "dark" ? "dark" : "light",
           title,
         },

@@ -8,11 +8,11 @@ import {
   type MouseEvent,
 } from "react";
 
-import {
-  BrowserSidebar,
-  type BrowserBookmark,
-  type BrowserSidebarSide,
-} from "@/components/element/browser-sidebar";
+import { Dashboard } from "@/layouts/dashboard";
+import type {
+  BrowserBookmark,
+  BrowserSidebarSide,
+} from "@/components/dashboard/bookmarks";
 import type { BrowserTabItem } from "@/components/element/browser-tabs";
 import { FindInPage } from "@/components/element/find-in-page";
 import { LoadingScreen } from "@/components/element/loading-screen";
@@ -32,8 +32,11 @@ import {
   defaultBrowserPreferences,
   type BrowserSnapshot,
   type PersistedTab,
+  type PersistedTabGroup,
 } from "@/lib/browser/persistence";
 import { applyTheme, subscribeToSystemTheme, type Theme } from "@/lib/theme";
+import { toast } from "@/providers/toaster";
+import { useAuth } from "@/hooks/use-auth";
 
 const BROWSER_CHROME_HEIGHT = 112;
 const SIDEBAR_WIDTH = 256;
@@ -85,8 +88,7 @@ function getWebDestination(value: string) {
 }
 
 function toPersistedTab(tab: BrowserTabItem): PersistedTab {
-  const { id, title, url, faviconUrl, isMuted, isPinned, internalPage } = tab;
-  return {
+  const {
     id,
     title,
     url,
@@ -94,10 +96,59 @@ function toPersistedTab(tab: BrowserTabItem): PersistedTab {
     isMuted,
     isPinned,
     internalPage,
+    isSleeping,
+    lastActiveAt,
+    navigation,
+  } = tab;
+  return {
+    id,
+    title,
+    url: internalPage === "auth" ? "gorth://auth" : url,
+    faviconUrl,
+    isMuted,
+    isPinned,
+    internalPage,
+    isSleeping,
+    lastActiveAt,
+    navigation,
   };
 }
 
 export default function Application() {
+  const authentication = useAuth();
+  const authTabId = useRef<string | null>(null);
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.downloads.onNotification(
+      ({ kind, filename }) => {
+        toast.add({
+          title:
+            kind === "completed"
+              ? "Download completed"
+              : kind === "interrupted"
+                ? "Download interrupted"
+                : "Download started",
+          description: filename,
+          type:
+            kind === "completed"
+              ? "success"
+              : kind === "interrupted"
+                ? "error"
+                : "info",
+        });
+      },
+    );
+    const unsubscribeErrors = window.electronAPI.downloads.onError((message) =>
+      toast.add({
+        title: "Download error",
+        description: message,
+        type: "error",
+      }),
+    );
+    return () => {
+      unsubscribe();
+      unsubscribeErrors();
+    };
+  }, []);
   const [verticalTabs, setVerticalTabs] = useState(
     defaultBrowserPreferences.verticalTabs,
   );
@@ -105,6 +156,9 @@ export default function Application() {
     defaultBrowserPreferences.verticalCollapsed,
   );
   const [tabs, setTabs] = useState<BrowserTabItem[]>([createNewTab("home")]);
+  const [groups, setGroups] = useState<PersistedTabGroup[]>([]);
+  const lastActiveGroup = useRef<string | null>(null);
+  const currentSnapshot = useRef<BrowserSnapshot | null>(null);
   const [activeTabId, setActiveTabId] = useState("home");
   const [bookmarks, setBookmarks] = useState<BrowserBookmark[]>([]);
   const [history, setHistory] = useState<BrowserHistoryItem[]>([]);
@@ -117,6 +171,12 @@ export default function Application() {
     defaultBrowserPreferences.showTitlebarLogo,
   );
   const [flags, setFlags] = useState(defaultBrowserPreferences.flags);
+  const [sleepAfterMinutes, setSleepAfterMinutes] = useState(
+    defaultBrowserPreferences.sleepAfterMinutes,
+  );
+  const [archiveAfterDays, setArchiveAfterDays] = useState(
+    defaultBrowserPreferences.archiveAfterDays,
+  );
   const [theme, setTheme] = useState<Theme>(defaultBrowserPreferences.theme);
   const [isHydrated, setIsHydrated] = useState(false);
   const [startupError, setStartupError] = useState("");
@@ -143,22 +203,106 @@ export default function Application() {
     activeTab.internalPage === null && Boolean(activeTab.url && splitCandidate);
 
   const openWebTab = useCallback((value: string) => {
-    const destination = getWebDestination(value);
+    const internalPage = parseInternalPage(value);
+    const destination = internalPage
+      ? getInternalPageUrl(internalPage)
+      : getWebDestination(value);
     const id = crypto.randomUUID();
 
     setTabs((currentTabs) => [
       ...currentTabs,
-      {
-        ...createNewTab(id),
-        title: "Loading…",
-        url: destination,
-        isHome: false,
-        isLoading: true,
-        internalPage: null,
-      },
+      internalPage
+        ? internalPage === "new-tab"
+          ? createNewTab(id)
+          : createInternalTab(id, internalPage)
+        : {
+            ...createNewTab(id),
+            title: "Loading…",
+            url: destination,
+            isHome: false,
+            isLoading: true,
+            internalPage: null,
+          },
     ]);
     setActiveTabId(id);
-    void window.electronAPI.tabs.navigate(id, destination);
+    if (internalPage === "new-tab") window.electronAPI.tabs.home(id);
+    else void window.electronAPI.tabs.navigate(id, destination);
+  }, []);
+
+  useEffect(() => {
+    let wasVisible = false;
+    const accept = (state: {
+      visible: boolean;
+      url?: string;
+      completed?: boolean;
+      loading?: boolean;
+    }) => {
+      if (!state.visible) {
+        wasVisible = false;
+        const id = authTabId.current;
+        if (id && state.completed) {
+          setActiveTabId(id);
+          window.electronAPI.tabs.activate(id);
+        }
+        if (id)
+          setTabs((current) =>
+            current.map((tab) =>
+              tab.id === id
+                ? {
+                    ...tab,
+                    url: "gorth://auth",
+                    internalPage: "auth",
+                    title: state.completed
+                      ? "Đăng nhập thành công"
+                      : "Gorth Account",
+                  }
+                : tab,
+            ),
+          );
+        return;
+      }
+      const opening = !wasVisible;
+      wasVisible = true;
+      const id = authTabId.current ?? crypto.randomUUID();
+      authTabId.current = id;
+      setTabs((current) =>
+        current.some((tab) => tab.id === id)
+          ? current.map((tab) =>
+              tab.id === id
+                ? {
+                    ...tab,
+                    url: state.url ?? tab.url,
+                    title: "Đăng nhập Gorth",
+                    internalPage: null,
+                    isLoading: !!state.loading,
+                    canGoBack: true,
+                  }
+                : tab,
+            )
+          : [
+              ...current,
+              {
+                ...createInternalTab(id, "auth"),
+                url: state.url ?? "gorth://auth",
+                title: "Đăng nhập Gorth",
+                internalPage: null,
+                isLoading: !!state.loading,
+                canGoBack: true,
+              },
+            ],
+      );
+      if (!opening) return;
+      setIsFindOpen(false);
+      setIsWebFullScreen(false);
+      setActiveTabId(id);
+      setSplitTabId(null);
+      window.electronAPI.tabs.setSplit(null);
+      void window.electronAPI.auth.attachTab(id);
+    };
+    const unsubscribe = window.electronAPI.auth.onViewChanged(accept);
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -174,17 +318,19 @@ export default function Application() {
               canGoForward: false,
               isHome: tab.internalPage === "new-tab",
               isLoading:
-                tab.internalPage === null || tab.internalPage === "error",
+                !tab.isSleeping &&
+                (tab.internalPage === null || tab.internalPage === "error"),
               internalPage:
                 tab.internalPage === "error" ? null : tab.internalPage,
             }))
-          : [createNewTab("home")];
+          : [createNewTab(crypto.randomUUID())];
         const restoredActiveId = restoredTabs.some(
           (tab) => tab.id === snapshot.activeTabId,
         )
           ? (snapshot.activeTabId as string)
           : restoredTabs[0].id;
         setTabs(restoredTabs);
+        setGroups(snapshot.groups ?? []);
         setActiveTabId(restoredActiveId);
         setSplitTabId(snapshot.splitTabId);
         setBookmarks(snapshot.bookmarks);
@@ -194,6 +340,8 @@ export default function Application() {
         setSidebarSide(snapshot.preferences.sidebarSide);
         setShowTitlebarLogo(snapshot.preferences.showTitlebarLogo);
         setFlags(snapshot.preferences.flags);
+        setSleepAfterMinutes(snapshot.preferences.sleepAfterMinutes);
+        setArchiveAfterDays(snapshot.preferences.archiveAfterDays);
         setTheme(snapshot.preferences.theme);
         applyTheme(snapshot.preferences.theme);
         lastVisitedUrlByTab.current = new Map(
@@ -201,19 +349,8 @@ export default function Application() {
             .filter((tab) => tab.internalPage === null && tab.url)
             .map((tab) => [tab.id, tab.url]),
         );
-        for (const tab of restoredTabs) {
-          if (tab.internalPage === "new-tab") {
-            window.electronAPI.tabs.home(tab.id);
-          } else if (tab.internalPage) {
-            void window.electronAPI.tabs.navigate(
-              tab.id,
-              getInternalPageUrl(tab.internalPage),
-            );
-          } else if (tab.url) {
-            void window.electronAPI.tabs.navigate(tab.id, tab.url);
-          }
-          if (tab.isMuted) window.electronAPI.tabs.setMuted(tab.id, true);
-        }
+        // Main restores only active/pinned/companion views. Inactive tabs keep
+        // their persisted URL and history without eagerly starting renderers.
         window.electronAPI.tabs.activate(restoredActiveId);
         window.electronAPI.tabs.setSplit(snapshot.splitTabId);
         setIsHydrated(true);
@@ -234,6 +371,23 @@ export default function Application() {
     if (!isHydrated) return;
     window.electronAPI.tabs.activate(activeTabId);
   }, [activeTabId, isHydrated]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    const group = groups.find((item) => item.tabIds.includes(activeTabId));
+    const partnerId =
+      group?.mode !== "normal"
+        ? (group?.tabIds.find((id) => id !== activeTabId) ?? null)
+        : null;
+    if (group || lastActiveGroup.current) {
+      setSplitTabId(partnerId);
+      window.electronAPI.tabs.setSplit(
+        partnerId,
+        group?.mode === "glance" ? "glance" : "split",
+      );
+    }
+    lastActiveGroup.current = group?.id ?? null;
+  }, [activeTabId, groups, isHydrated]);
 
   useLayoutEffect(() => {
     window.electronAPI.tabs.setLayout({
@@ -263,21 +417,25 @@ export default function Application() {
     if (!isHydrated) return;
     const snapshot: BrowserSnapshot = {
       activeTabId,
+      groups,
       splitTabId,
-      tabs: tabs.map(
-        ({ id, title, url, faviconUrl, isMuted, isPinned, internalPage }) => ({
-          id,
-          title,
-          url,
-          faviconUrl,
-          isMuted,
-          isPinned,
-          internalPage,
-        }),
+      tabs: tabs.map((tab) =>
+        toPersistedTab(
+          tab.id === authTabId.current && tab.internalPage === null
+            ? {
+                ...tab,
+                url: "gorth://auth",
+                internalPage: "auth",
+                navigation: undefined,
+              }
+            : tab,
+        ),
       ),
       bookmarks,
       history,
       preferences: {
+        sleepAfterMinutes,
+        archiveAfterDays,
         flags,
         sidebarSide,
         showTitlebarLogo,
@@ -289,6 +447,7 @@ export default function Application() {
     const timer = setTimeout(() => {
       void window.electronAPI.persistence.save(snapshot);
     }, 250);
+    currentSnapshot.current = snapshot;
     const flushSession = (event: BeforeUnloadEvent) => {
       clearTimeout(timer);
       if (!window.electronAPI.persistence.flush(snapshot)) {
@@ -306,6 +465,7 @@ export default function Application() {
     bookmarks,
     flags,
     history,
+    groups,
     isHydrated,
     showTitlebarLogo,
     sidebarSide,
@@ -314,6 +474,8 @@ export default function Application() {
     theme,
     verticalCollapsed,
     verticalTabs,
+    sleepAfterMinutes,
+    archiveAfterDays,
   ]);
 
   useEffect(
@@ -337,6 +499,15 @@ export default function Application() {
   useEffect(
     () => window.electronAPI.tabs.onOpenRequested(openWebTab),
     [openWebTab],
+  );
+
+  useEffect(
+    () =>
+      window.electronAPI.lifecycle.onArchived((id) => {
+        setTabs((current) => current.filter((tab) => tab.id !== id));
+        lastVisitedUrlByTab.current.delete(id);
+      }),
+    [],
   );
 
   useEffect(() => {
@@ -384,14 +555,22 @@ export default function Application() {
 
   const closeTab = (tabId: string) => {
     if (tabs.length === 1) return;
+    if (tabId === authTabId.current) {
+      authTabId.current = null;
+      void authentication.cancel();
+    }
 
     const closingIndex = tabs.findIndex((tab) => tab.id === tabId);
     const nextTabs = tabs.filter((tab) => tab.id !== tabId);
     const nextActiveTab = nextTabs[Math.min(closingIndex, nextTabs.length - 1)];
 
-    void window.electronAPI.persistence.closeTab(
-      toPersistedTab(tabs[closingIndex]),
-    );
+    void window.electronAPI.persistence
+      .closeTab(toPersistedTab(tabs[closingIndex]))
+      .then(() => window.electronAPI.persistence.listGroups())
+      .then(setGroups)
+      .catch((error: unknown) =>
+        console.error("Unable to update closed tab groups.", error),
+      );
 
     window.electronAPI.tabs.close(tabId);
     lastVisitedUrlByTab.current.delete(tabId);
@@ -408,6 +587,10 @@ export default function Application() {
   const closeOtherTabs = (tabId: string) => {
     const tabToKeep = tabs.find((tab) => tab.id === tabId);
     if (!tabToKeep) return;
+    if (authTabId.current && authTabId.current !== tabId) {
+      authTabId.current = null;
+      void authentication.cancel();
+    }
 
     for (const tab of tabs) {
       if (tab.id === tabId) continue;
@@ -417,6 +600,13 @@ export default function Application() {
     }
 
     setTabs([tabToKeep]);
+    setGroups((current) =>
+      current.flatMap((group) =>
+        group.mode === "normal" && group.tabIds.includes(tabId)
+          ? [{ ...group, tabIds: [tabId] }]
+          : [],
+      ),
+    );
     setActiveTabId(tabId);
     setSplitTabId(null);
     window.electronAPI.tabs.setSplit(null);
@@ -462,6 +652,8 @@ export default function Application() {
   };
 
   const toggleTabPinned = (tabId: string) => {
+    const tab = tabs.find((item) => item.id === tabId);
+    if (tab) window.electronAPI.tabs.setPinned(tabId, !tab.isPinned);
     setTabs((current) =>
       current
         .map((tab) =>
@@ -643,38 +835,13 @@ export default function Application() {
           "previous-tab": () =>
             activateTab(tabs[(activeIndex - 1 + tabs.length) % tabs.length].id),
           settings: () => openInternalPage("settings"),
+          "settings/help": () => openInternalPage("settings/help"),
+          shortcuts: () => openInternalPage("shortcuts"),
         };
         actions[action]?.();
       }),
     [activeTabId, tabs],
   );
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const command = event.metaKey || event.ctrlKey;
-      if (!command) return;
-      const key = event.key.toLowerCase();
-      if (key === "f") {
-        event.preventDefault();
-        setIsFindOpen(true);
-      } else if (key === "t" && event.shiftKey) {
-        event.preventDefault();
-        void reopenClosedTab();
-      } else if (key === "t") {
-        event.preventDefault();
-        createTab();
-      } else if (key === "w") {
-        event.preventDefault();
-        closeTab(activeTabId);
-      } else if (key === "r") {
-        event.preventDefault();
-        if (event.shiftKey) window.electronAPI.tabs.forceReload(activeTabId);
-        else window.electronAPI.tabs.reload(activeTabId);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeTabId, tabs]);
 
   if (!isHydrated) return <LoadingScreen error={startupError} />;
 
@@ -685,6 +852,7 @@ export default function Application() {
     >
       {!isWebFullScreen && !verticalTabs && (
         <Titlebar
+          groups={groups}
           activeTabId={activeTabId}
           showLogo={showTitlebarLogo}
           tabs={tabs}
@@ -716,7 +884,11 @@ export default function Application() {
           onHome={() => navigate("https://www.google.com")}
           onNavigate={navigate}
           onOpenInternal={openInternalPage}
-          onReload={() => window.electronAPI.tabs.reload(activeTabId)}
+          onReload={() =>
+            activeTab.internalPage === "auth"
+              ? void window.electronAPI.auth.reloadView()
+              : window.electronAPI.tabs.reload(activeTabId)
+          }
           onStop={() => window.electronAPI.tabs.stop(activeTabId)}
           onToggleSidebar={() => setIsSidebarOpen((isOpen) => !isOpen)}
           onToggleSplit={toggleSplit}
@@ -730,6 +902,7 @@ export default function Application() {
         <div className="relative flex min-h-0 flex-1">
           {verticalTabs && (
             <VerticalTabs
+              groups={groups}
               activeTabId={activeTabId}
               tabs={tabs}
               collapsed={verticalCollapsed}
@@ -742,8 +915,10 @@ export default function Application() {
               onTogglePin={toggleTabPinned}
             />
           )}
-          {isSidebarVisible && sidebarSide === "left" && (
-            <BrowserSidebar
+{isSidebarVisible && sidebarSide === "left" && (
+            <Dashboard
+              variant="bookmarks"
+              side={sidebarSide}
               bookmarks={bookmarks}
               onClose={() => setIsSidebarOpen(false)}
               onNavigate={navigate}
@@ -759,6 +934,29 @@ export default function Application() {
             )}
             {activeTab.internalPage && activeTab.internalPage !== "new-tab" && (
               <SpecialPage
+                groups={groups}
+                tabs={tabs}
+                onSaveGroup={async (group) => {
+                  if (currentSnapshot.current)
+                    await window.electronAPI.persistence.save(
+                      currentSnapshot.current,
+                    );
+                  const saved =
+                    await window.electronAPI.persistence.saveGroup(group);
+                  setGroups(saved);
+                }}
+                onDeleteGroup={async (id) => {
+                  const saved =
+                    await window.electronAPI.persistence.deleteGroup(id);
+                  setGroups(saved);
+                }}
+                onOpenGroup={(id) => {
+                  const group = groups.find((item) => item.id === id);
+                  const tabId = group?.tabIds.find((member) =>
+                    tabs.some((tab) => tab.id === member),
+                  );
+                  if (tabId) activateTab(tabId);
+                }}
                 bookmarks={bookmarks}
                 history={history}
                 page={activeTab.internalPage}
@@ -784,6 +982,24 @@ export default function Application() {
                 onVerticalTabsChange={setVerticalTabs}
                 flags={flags}
                 onFlagsChange={setFlags}
+                sleepAfterMinutes={sleepAfterMinutes}
+                archiveAfterDays={archiveAfterDays}
+                onSleepAfterMinutesChange={setSleepAfterMinutes}
+                onArchiveAfterDaysChange={setArchiveAfterDays}
+                onRestoreArchivedTab={(tab) => {
+                  const restored = {
+                    ...tab,
+                    isHome: false,
+                    canGoBack: false,
+                    canGoForward: false,
+                    isLoading: true,
+                    internalPage: null,
+                  };
+                  setTabs((current) => [...current, restored]);
+                  setActiveTabId(tab.id);
+                  window.electronAPI.tabs.activate(tab.id);
+                  window.electronAPI.tabs.setMuted(tab.id, tab.isMuted);
+                }}
                 theme={theme}
                 onThemeChange={setTheme}
                 errorCode={activeTab.errorCode}
@@ -793,8 +1009,10 @@ export default function Application() {
               />
             )}
           </main>
-          {isSidebarVisible && sidebarSide === "right" && (
-            <BrowserSidebar
+{isSidebarVisible && sidebarSide === "right" && (
+            <Dashboard
+              variant="bookmarks"
+              side={sidebarSide}
               bookmarks={bookmarks}
               onClose={() => setIsSidebarOpen(false)}
               onNavigate={navigate}

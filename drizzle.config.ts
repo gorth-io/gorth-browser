@@ -7,6 +7,6 @@ export default defineConfig({
   schema: "./database/schema.ts",
   out: "./database/migrations",
   dbCredentials: {
-    url: path.join(getDataDirectory(), "gorth-browser.sqlite"),
+    url: path.join(getDataDirectory(), "gorth-browser.db"),
   },
 });

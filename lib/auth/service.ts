@@ -1,8 +1,18 @@
-import { BrowserWindow, ipcMain, shell } from "electron";
+import { upsertUserProfile } from "@/services/user-profile";
+import { BrowserWindow, ipcMain } from "electron";
+import {
+  openAuthView,
+  closeAuthView,
+  clearAuthBrowserSession,
+  registerAuthViewIpc,
+} from "@/main/services/auth-view";
 import { readVault, writeVault, vaultExists } from "./vault";
-import { gorthIssuer } from "@/lib/utils/environment";
+import {
+  ssoIssuer,
+  ssoOAuthClientId,
+  ssoRedirectUri,
+} from "@/lib/utils/environment";
 import { gorthBinding, loginGorth, refreshGorth, revokeGorth } from "./gorth";
-import { AuthHttpError } from "./http";
 import type { AuthResult, AuthSession, AuthSnapshot } from "./types";
 
 let session: AuthSession | null = null;
@@ -16,14 +26,19 @@ function snapshot(): AuthSnapshot {
           name: session.name,
           email: session.email,
           username: session.username,
+          image: session.image,
+          emailVerified: session.emailVerified,
           expiresAt: session.tokens.expiresAt,
+          canRefresh:
+            !!session.tokens.refreshToken &&
+            session.tokens.binding === gorthBinding(),
           needsLogin:
             session.tokens.expiresAt <= Date.now() ||
             session.tokens.binding !== gorthBinding(),
         }
       : null,
     locked: !unlocked && vaultExists(),
-    configured: !!gorthIssuer,
+    configured: !!(ssoIssuer && ssoOAuthClientId && ssoRedirectUri),
     busy: !!operation,
   };
 }
@@ -40,6 +55,7 @@ async function unlock() {
 async function save(next: AuthSession | null) {
   await writeVault(next);
   session = next;
+  unlocked = true;
   changed();
 }
 export function cancelAuth() {
@@ -54,7 +70,9 @@ export function registerAuthIpc() {
       event.senderFrame !== event.sender.mainFrame
     )
       throw new Error("Untrusted auth sender");
+    return window;
   };
+  registerAuthViewIpc(trusted);
   ipcMain.handle("auth:snapshot", (event): AuthResult => {
     trusted(event);
     return { snapshot: snapshot() };
@@ -62,14 +80,14 @@ export function registerAuthIpc() {
   ipcMain.handle(
     "auth:command",
     async (event, action: unknown): Promise<AuthResult> => {
-      trusted(event);
+      const owner = trusted(event);
       if (action === "cancel") {
         cancelAuth();
         return { snapshot: snapshot() };
       }
       if (
         typeof action !== "string" ||
-        !["login", "unlock", "logout", "refresh"].includes(action)
+        !["login", "register", "unlock", "logout", "refresh"].includes(action)
       )
         return { snapshot: snapshot(), error: "Invalid account action." };
       if (operation)
@@ -78,22 +96,30 @@ export function registerAuthIpc() {
           error: "An account operation is already running.",
         };
       const controller = new AbortController();
+      let completed = false;
       operation = controller;
       changed();
       try {
-        await unlock();
+        // A fresh OAuth login replaces the browser session; it must not decrypt
+        // an old (possibly inaccessible) vault before opening the SSO page.
+        if (action !== "login" && action !== "register") await unlock();
         controller.signal.throwIfAborted();
-        if (action === "login") {
+        if (action === "login" || action === "register") {
           const next = await loginGorth(
-            (url) => shell.openExternal(url),
+            (url, receiveCallback) =>
+              openAuthView(owner, url, receiveCallback, controller, action),
             controller.signal,
+            action,
           );
           controller.signal.throwIfAborted();
+          upsertUserProfile(next);
           await save(next);
+          completed = true;
         }
         if (action === "logout") {
           const previous = session;
           await save(null);
+          await clearAuthBrowserSession();
           if (previous) await revokeGorth(previous.tokens, controller.signal);
         }
         if (
@@ -106,13 +132,17 @@ export function registerAuthIpc() {
         ) {
           const next = await refreshGorth(session, controller.signal);
           controller.signal.throwIfAborted();
+          upsertUserProfile(next);
           await save(next);
         }
         return { snapshot: { ...snapshot(), busy: false } };
       } catch (error) {
         if (
-          error instanceof AuthHttpError &&
-          ["invalid_grant", "invalid_token"].includes(error.code)
+          unlocked &&
+          (action === "refresh" ||
+            (action === "unlock" &&
+              session &&
+              session.tokens.expiresAt <= Date.now() + 30_000))
         ) {
           session = null;
           try {
@@ -130,9 +160,15 @@ export function registerAuthIpc() {
               : "Sign-in failed.",
         };
       } finally {
+        closeAuthView(owner, completed);
         if (operation === controller) operation = null;
         changed();
       }
     },
   );
+}
+
+export function getAuthenticatedUserId() {
+  const current = snapshot().user;
+  return unlocked && current && !current.needsLogin ? current.id : null;
 }

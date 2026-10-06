@@ -12,6 +12,8 @@ const sessionSchema = z
     name: z.string(),
     email: z.string().optional(),
     username: z.string().optional(),
+    image: z.string().optional(),
+    emailVerified: z.boolean().optional(),
     tokens: z.object({
       accessToken: z.string().min(1),
       refreshToken: z.string().min(1).optional(),

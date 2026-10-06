@@ -40,7 +40,7 @@ const config: ForgeConfig = {
         filePath === "/assets" ||
         filePath.startsWith("/assets/") ||
         filePath === "/node_modules" ||
-        filePath.startsWith("/node_modules/better-sqlite3")
+        filePath.startsWith("/node_modules/")
       );
     },
   },

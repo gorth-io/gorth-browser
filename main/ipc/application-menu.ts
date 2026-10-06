@@ -2,6 +2,7 @@ import { Menu, type MenuItemConstructorOptions } from "electron";
 import { APP_NAME, createWindow } from "@/main/windows/capital";
 import { sendAppAction } from "@/main/ipc/native-menu";
 import { resizeFocusedWindow } from "@/main/ipc/window";
+import { applyShortcutAccelerators } from "@/main/ipc/shortcuts";
 
 export function installApplicationMenu() {
   const fileMenu: MenuItemConstructorOptions = {
@@ -31,7 +32,10 @@ export function installApplicationMenu() {
           {
             label: APP_NAME,
             submenu: [
-              { role: "about" as const },
+              {
+                label: `About ${APP_NAME}`,
+                click: () => sendAppAction("settings/help"),
+              },
               { type: "separator" as const },
               {
                 label: "Settings…",
@@ -90,6 +94,20 @@ export function installApplicationMenu() {
     {
       label: "Tabs",
       submenu: [
+        ...(process.platform !== "darwin"
+          ? [
+              {
+                label: "Settings…",
+                accelerator: "CmdOrCtrl+,",
+                click: () => sendAppAction("settings"),
+              },
+            ]
+          : []),
+        {
+          label: "Keyboard Shortcuts",
+          accelerator: "CmdOrCtrl+Shift+K",
+          click: () => sendAppAction("shortcuts"),
+        },
         {
           label: "Next Tab",
           accelerator: "Ctrl+Tab",
@@ -144,5 +162,6 @@ export function installApplicationMenu() {
       ],
     },
   ];
+  applyShortcutAccelerators(template);
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }

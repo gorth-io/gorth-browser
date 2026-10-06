@@ -12,10 +12,17 @@ import {
   CircleHelp,
   Rocket,
   Sparkles,
+  Keyboard,
+  Archive,
+  UserRound,
+  type LucideIcon,
 } from "lucide-react";
 import type { BrowserInternalPage } from "@/lib/browser/internal-pages";
 
 const internalIcons = {
+  auth: UserRound,
+  archive: Archive,
+  shortcuts: Keyboard,
   help: CircleHelp,
   welcome: Rocket,
   "whats-new": Sparkles,
@@ -27,7 +34,10 @@ const internalIcons = {
   history: Clock3,
   flags: FlaskConical,
   extensions: Puzzle,
-};
+} satisfies Record<
+  Exclude<BrowserInternalPage, `settings/${string}`>,
+  LucideIcon
+>;
 
 function TabIcon({
   internalPage,
@@ -41,7 +51,7 @@ function TabIcon({
   if (internalPage) {
     const Icon = internalPage.startsWith("settings/")
       ? Settings
-      : internalIcons[internalPage as keyof typeof internalIcons];
+      : (internalIcons[internalPage as keyof typeof internalIcons] ?? Globe2);
     return <Icon className="size-4 shrink-0" />;
   }
   if (isLoading)

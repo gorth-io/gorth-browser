@@ -1,4 +1,8 @@
 export const settingsPageDefinitions = {
+  "settings/profile": {
+    title: "Gorth profile",
+    url: "gorth://settings/profile",
+  },
   "settings/get-started": {
     title: "Get started",
     url: "gorth://settings/get-started",

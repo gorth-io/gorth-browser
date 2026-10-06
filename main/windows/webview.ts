@@ -9,9 +9,11 @@ export interface WebviewLayout {
 
 export interface WebviewRecord {
   view: WebContentsView;
+  transientAuth?: boolean;
 }
 
 export interface WebviewLayoutState {
+  companionMode: "split" | "glance";
   activeTabId: string | null;
   internalTabIds: { has(tabId: string): boolean };
   layout: WebviewLayout;
@@ -82,12 +84,37 @@ export function updateWebviewBounds(
   if (visibleRecords.length === 0 || width === 0 || height === 0) return;
 
   if (visibleRecords.length === 1) {
+    visibleRecords[0].view.setBorderRadius(0);
     visibleRecords[0].view.setBounds({ x, y, width, height });
     visibleRecords[0].view.setVisible(true);
     return;
   }
 
   const dividerWidth = 1;
+  if (state.companionMode === "glance") {
+    const front = visibleRecords[0].view;
+    const back = visibleRecords[1].view;
+    const frontWidth = Math.floor(width * 0.85);
+    back.setBounds({ x, y, width, height });
+    back.setVisible(true);
+    front.setBounds({
+      x: x + Math.floor((width - frontWidth) / 2),
+      y: y + 12,
+      width: frontWidth,
+      height: Math.max(0, height - 24),
+    });
+    front.setBorderRadius(12);
+    front.setVisible(true);
+    // Raise the preview within native content; keep portal UI above both views.
+    const children = window.contentView.children;
+    const frontIndex = children.indexOf(front);
+    const backIndex = children.indexOf(back);
+    if (frontIndex < backIndex) {
+      window.contentView.addChildView(front, backIndex);
+    }
+    return;
+  }
+  for (const record of visibleRecords) record.view.setBorderRadius(0);
   const firstWidth = Math.floor((width - dividerWidth) / 2);
   const secondWidth = Math.max(0, width - firstWidth - dividerWidth);
   visibleRecords[0].view.setBounds({ x, y, width: firstWidth, height });

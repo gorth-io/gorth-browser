@@ -1,8 +1,53 @@
 /// <reference types="vite/client" />
 
-export const gorthIssuer = import.meta.env.VITE_GORTH_SSO_ISSUER ?? "";
-export const gorthClientId =
-  import.meta.env.VITE_GORTH_SSO_CLIENT_ID ?? "gorth-browser";
-export const gorthRedirectUri =
-  import.meta.env.VITE_GORTH_SSO_REDIRECT_URI ??
-  "http://127.0.0.1:43822/auth/callback";
+export const ssoOAuthClientId =
+  import.meta.env?.VITE_SSO_OAUTH_CLIENT_ID ??
+  process.env.VITE_SSO_OAUTH_CLIENT_ID ??
+  "";
+export const ssoClientUrl =
+  import.meta.env?.VITE_SSO_CLIENT_URL ?? process.env.VITE_SSO_CLIENT_URL ?? "";
+export const ssoServerUrl =
+  import.meta.env?.VITE_SSO_SERVER_URL ?? process.env.VITE_SSO_SERVER_URL ?? "";
+export const appUrl =
+  import.meta.env?.VITE_APP_URL ?? process.env.VITE_APP_URL ?? "";
+export const ssoAccessToken =
+  import.meta.env?.VITE_SSO_ACCESS_TOKEN ??
+  process.env.VITE_SSO_ACCESS_TOKEN ??
+  "";
+export const ssoRefreshToken =
+  import.meta.env?.VITE_SSO_REFRESH_TOKEN ??
+  process.env.VITE_SSO_REFRESH_TOKEN ??
+  "";
+export const ssoSessionApp =
+  import.meta.env?.VITE_SSO_SESSION_APP ??
+  process.env.VITE_SSO_SESSION_APP ??
+  "";
+export const ssoOAuthState =
+  import.meta.env?.VITE_SSO_OAUTH_STATE ??
+  process.env.VITE_SSO_OAUTH_STATE ??
+  "";
+export const ssoOAuthCodeVerifier =
+  import.meta.env?.VITE_SSO_OAUTH_CODE_VERIFIER ??
+  process.env.VITE_SSO_OAUTH_CODE_VERIFIER ??
+  "";
+export const ssoOAuthReturnTo =
+  import.meta.env?.VITE_SSO_OAUTH_RETURN_TO ??
+  process.env.VITE_SSO_OAUTH_RETURN_TO ??
+  "";
+export const ssoOAuthIssuer =
+  import.meta.env?.VITE_SSO_OAUTH_ISSUER ??
+  process.env.VITE_SSO_OAUTH_ISSUER ??
+  "";
+export const ssoOAuthNonce =
+  import.meta.env?.VITE_SSO_OAUTH_NONCE ??
+  process.env.VITE_SSO_OAUTH_NONCE ??
+  "";
+
+// Better Auth's issuer includes its /auth base path. These are derived URLs,
+// not extra environment variables or OAuth secrets.
+export const ssoIssuer = ssoClientUrl
+  ? new URL("/auth", ssoClientUrl).href
+  : "";
+export const ssoRedirectUri = appUrl
+  ? new URL("/auth/callback", appUrl).href
+  : "";

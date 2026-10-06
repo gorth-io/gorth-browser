@@ -110,3 +110,7 @@ node_modules/
 
 # Forge
 forge.env.d.ts
+
+# env
+.env.local
+.env.production

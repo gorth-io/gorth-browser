@@ -1,6 +1,28 @@
 import { ipcRenderer } from "electron";
+import type { UserProfileCache } from "@/lib/server/interface";
+import type { AuthViewBounds, AuthViewState } from "@/lib/auth/view-types";
 import type { AuthAction, AuthResult, AuthSnapshot } from "@/lib/auth/types";
 export const authApi = {
+  attachTab: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke("auth:view-tab", id),
+  profile: async (): Promise<UserProfileCache | null> => {
+    return ipcRenderer.invoke("desktop:profile");
+  },
+  viewState: (): Promise<AuthViewState> =>
+    ipcRenderer.invoke("auth:view-state"),
+  setViewBounds: (bounds: AuthViewBounds): Promise<void> =>
+    ipcRenderer.invoke("auth:view-bounds", bounds),
+  reloadView: (): Promise<void> => ipcRenderer.invoke("auth:view-reload"),
+  setViewVisible: (visible: boolean): Promise<void> =>
+    ipcRenderer.invoke("auth:view-visible", visible),
+  onViewChanged: (callback: (state: AuthViewState) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      state: AuthViewState,
+    ) => callback(state);
+    ipcRenderer.on("auth:view-changed", listener);
+    return () => ipcRenderer.removeListener("auth:view-changed", listener);
+  },
   onChanged: (callback: (snapshot: AuthSnapshot) => void) => {
     const listener = (
       _event: Electron.IpcRendererEvent,

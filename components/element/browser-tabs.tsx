@@ -1,14 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Volume2, VolumeX, X } from "lucide-react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Folder,
+  Volume2,
+  VolumeX,
+  X,
+} from "lucide-react";
+import type { PersistedTabGroup } from "@/lib/browser/persistence";
 
 import { Button } from "@/components/ui/button";
 import { TabIcon } from "@/components/element/tab-icon";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/providers/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/providers/tooltip";
 import { cn } from "@/lib/utils";
+import { toast } from "@/providers/toaster";
 import type { BrowserInternalPage } from "@/lib/browser/internal-pages";
 import {
   getPortalMenuTheme,
@@ -17,6 +22,9 @@ import {
 } from "@/lib/browser/browser-menu";
 
 interface BrowserTabItem {
+  isSleeping?: boolean;
+  lastActiveAt?: number;
+  navigation?: import("@/lib/browser/persistence").PersistedTab["navigation"];
   errorCode?: number;
   errorDescription?: string;
   errorUrl?: string;
@@ -34,6 +42,7 @@ interface BrowserTabItem {
 }
 
 interface BrowserTabsProps {
+  groups?: PersistedTabGroup[];
   vertical?: boolean;
   collapsed?: boolean;
   activeTabId: string;
@@ -47,6 +56,7 @@ interface BrowserTabsProps {
 }
 
 function BrowserTabs({
+  groups = [],
   vertical = false,
   collapsed = false,
   activeTabId,
@@ -58,6 +68,18 @@ function BrowserTabs({
   onToggleMute,
   onTogglePin,
 }: BrowserTabsProps) {
+  const emitted = new Set<string>();
+  const orderedTabs = tabs.flatMap((tab) => {
+    if (emitted.has(tab.id)) return [];
+    const group = groups.find((item) => item.tabIds.includes(tab.id));
+    const members = group
+      ? group.tabIds
+          .map((id) => tabs.find((item) => item.id === id))
+          .filter((item): item is BrowserTabItem => Boolean(item))
+      : [tab];
+    members.forEach((item) => emitted.add(item.id));
+    return members;
+  });
   const tabListRef = useRef<HTMLDivElement>(null);
   const [scrollState, setScrollState] = useState({
     canScrollLeft: false,
@@ -133,11 +155,34 @@ function BrowserTabs({
       tabs.length > 1,
       anchor,
       getPortalMenuTheme(),
+      tab.id !== activeTabId && !tab.isPinned,
     )) as TabContextMenuCommand | null;
 
     if (!command) return;
 
+    const runLifecycle = (action: "sleep" | "archive") => {
+      void window.electronAPI.lifecycle[action](tab.id)
+        .then((changed) => {
+          if (!changed)
+            toast.add({
+              title: "Tab is protected",
+              description:
+                "Active, pinned, grouped, loading, media, download and edited-form tabs stay open.",
+              type: "info",
+            });
+        })
+        .catch(() =>
+          toast.add({
+            title: "Unable to update tab",
+            description: "The tab was kept open. Please try again.",
+            type: "error",
+          }),
+        );
+    };
+
     const actions: Record<TabContextMenuCommand, () => void> = {
+      "sleep-tab": () => runLifecycle("sleep"),
+      "archive-tab": () => runLifecycle("archive"),
       "reload-tab": () => onReload(tab.id),
       "toggle-mute-tab": () => onToggleMute(tab.id),
       "toggle-pin-tab": () => onTogglePin(tab.id),
@@ -167,114 +212,149 @@ function BrowserTabs({
         role="tablist"
         aria-orientation={vertical ? "vertical" : "horizontal"}
       >
-        {tabs.map((tab) => {
+        {orderedTabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const iconOnly = collapsed || tab.isPinned;
+          const group = groups.find((item) => item.tabIds.includes(tab.id));
+          const firstMember =
+            group &&
+            group.tabIds.find((id) => tabs.some((item) => item.id === id)) ===
+              tab.id;
 
           return (
-            <div
-              className={cn(
-                "app-no-drag group relative flex h-9 items-center gap-1 rounded-lg border p-1 transition-colors",
-                iconOnly
-                  ? "size-9 shrink-0 border-0"
-                  : vertical
-                    ? "w-[180px] shrink-0"
-                    : "min-w-24 basis-[180px] max-w-[180px] flex-1",
-                isActive
-                  ? "border-border/70 bg-background/90 text-foreground shadow-sm"
-                  : "border-transparent text-muted-foreground hover:bg-background/50 hover:text-foreground",
+            <Fragment key={tab.id}>
+              {firstMember && (
+                <Button
+                  className={cn(
+                    "app-no-drag h-9 shrink-0 bg-foreground text-background hover:bg-foreground/90",
+                    vertical && !collapsed && "w-45 justify-start",
+                    collapsed && "size-9 p-0",
+                  )}
+                  title={`${group.name} (${group.mode})`}
+                  aria-label={`Open group ${group.name}`}
+                  onClick={() => onActivate(tab.id)}
+                >
+                  <Folder className="size-4" />
+                  {!collapsed && (
+                    <span className="max-w-[144px] truncate">{group.name}</span>
+                  )}
+                </Button>
               )}
-              data-tab-id={tab.id}
-              key={tab.id}
-              onMouseDown={(event) => {
-                if (event.button === 1) event.preventDefault();
-              }}
-              onAuxClick={(event) => {
-                if (event.button !== 1) return;
-                event.preventDefault();
-                event.stopPropagation();
-                onClose(tab.id);
-              }}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                void openTabContextMenu(tab, {
-                  height: 0,
-                  width: 0,
-                  x: event.clientX,
-                  y: event.clientY,
-                });
-              }}
-            >
               <Tooltip>
                 <TooltipTrigger
+                  closeOnClick={false}
                   render={
-                    <Button
-                      aria-selected={isActive}
-                      aria-label={tab.title}
+                    <div
                       className={cn(
-                        "absolute inset-0 h-full w-full justify-start gap-1 overflow-hidden px-2 text-xs font-normal",
+                        "app-no-drag group relative box-border flex h-9 cursor-pointer select-none items-center gap-1 overflow-hidden rounded-md border bg-clip-padding p-1 outline-none transition-[color,background-color,border-color,box-shadow] hover:bg-muted has-[:focus-visible]:border-ring",
                         iconOnly
-                          ? "justify-center p-0"
-                          : isActive
-                            ? "pr-16"
-                            : "group-hover:pr-16",
+                          ? "size-9 shrink-0"
+                          : vertical
+                            ? "w-[180px] shrink-0"
+                            : "min-w-24 basis-[180px] max-w-[180px] flex-1",
+                        isActive
+                          ? "bg-background/90 text-foreground"
+                          : "bg-transparent text-muted-foreground hover:text-foreground",
+                        isActive || tab.isPinned
+                          ? "border-border shadow-xs dark:border-input"
+                          : "border-transparent shadow-none",
+                        group && "border-foreground/50",
+                        tab.isSleeping && "opacity-60",
                       )}
-                      onClick={() => onActivate(tab.id)}
-                      role="tab"
-                      size={iconOnly ? "icon" : "sm"}
-                      variant="ghost"
+                      data-tab-id={tab.id}
+                      key={tab.id}
+                      onMouseDown={(event) => {
+                        if (event.button === 1) event.preventDefault();
+                      }}
+                      onAuxClick={(event) => {
+                        if (event.button !== 1) return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onClose(tab.id);
+                      }}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        void openTabContextMenu(tab, {
+                          height: 0,
+                          width: 0,
+                          x: event.clientX,
+                          y: event.clientY,
+                        });
+                      }}
                     />
                   }
                 >
-                  <TabIcon {...tab} />
+                  <div
+                    aria-selected={isActive}
+                    aria-label={tab.title}
+                    className={cn(
+                      "absolute inset-0 flex cursor-pointer select-none items-center justify-start gap-2 overflow-hidden rounded-md px-2 text-xs font-normal whitespace-nowrap outline-none [&_svg]:pointer-events-none [&_svg]:shrink-0",
+                      iconOnly ? "justify-center p-0" : "pr-16",
+                    )}
+                    onClick={() => onActivate(tab.id)}
+                    onKeyDown={(event) => {
+                      if (event.target !== event.currentTarget) return;
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onActivate(tab.id);
+                      }
+                    }}
+                    role="tab"
+                    tabIndex={0}
+                  >
+                    <TabIcon {...tab} />
+                    {!iconOnly && (
+                      <span className="min-w-0 truncate">{tab.title}</span>
+                    )}
+                  </div>
+
                   {!iconOnly && (
-                    <span className="min-w-0 truncate">{tab.title}</span>
+                    <>
+                      <Button
+                        aria-label={
+                          tab.isMuted
+                            ? `Unmute ${tab.title}`
+                            : `Mute ${tab.title}`
+                        }
+                        className={cn(
+                          "relative z-10 ml-auto size-6 active:translate-x-0! active:translate-y-0!",
+                          !isActive && "invisible group-hover:visible",
+                        )}
+                        onClick={() => onToggleMute(tab.id)}
+                        size="icon-xs"
+                        variant="ghost"
+                      >
+                        {tab.isMuted ? <VolumeX /> : <Volume2 />}
+                      </Button>
+
+                      <Button
+                        aria-label={`Close ${tab.title}`}
+                        className={cn(
+                          "relative z-10 size-6 active:translate-x-0! active:translate-y-0!",
+                          !isActive && "invisible group-hover:visible",
+                        )}
+                        disabled={tabs.length === 1}
+                        onClick={() => onClose(tab.id)}
+                        size="icon-xs"
+                        variant="ghost"
+                      >
+                        <X />
+                      </Button>
+                    </>
                   )}
                 </TooltipTrigger>
                 <TooltipContent
                   className="w-[180px]"
+                  align="center"
                   side={vertical ? "right" : "bottom"}
                 >
-                  <span className="line-clamp-2 min-w-0 break-words">{tab.title}</span>
+                  <span className="line-clamp-2 min-w-0 break-words">
+                    {tab.title}
+                  </span>
                 </TooltipContent>
               </Tooltip>
-
-              {!iconOnly && (
-                <>
-                  <Button
-                    aria-label={
-                      tab.isMuted ? `Unmute ${tab.title}` : `Mute ${tab.title}`
-                    }
-                    className={cn(
-                      "relative z-10 ml-auto size-6",
-                      !isActive && "invisible group-hover:visible",
-                    )}
-                    onClick={() => onToggleMute(tab.id)}
-                    size="icon-xs"
-                    title={tab.isMuted ? "Unmute tab" : "Mute tab"}
-                    variant="ghost"
-                  >
-                    {tab.isMuted ? <VolumeX /> : <Volume2 />}
-                  </Button>
-
-                  <Button
-                    aria-label={`Close ${tab.title}`}
-                    className={cn(
-                      "relative z-10 size-6",
-                      !isActive && "invisible group-hover:visible",
-                    )}
-                    disabled={tabs.length === 1}
-                    onClick={() => onClose(tab.id)}
-                    size="icon-xs"
-                    title="Close tab"
-                    variant="ghost"
-                  >
-                    <X />
-                  </Button>
-                </>
-              )}
-            </div>
+            </Fragment>
           );
         })}
       </div>

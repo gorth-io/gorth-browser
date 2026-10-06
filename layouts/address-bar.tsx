@@ -9,6 +9,7 @@ import {
 } from "react";
 import {
   ArrowLeft,
+  Archive,
   ArrowRight,
   Bookmark,
   BookOpen,
@@ -18,6 +19,7 @@ import {
   FlaskConical,
   Home,
   Menu,
+  Keyboard,
   PanelLeft,
   PanelLeftClose,
   PanelLeftOpen,
@@ -30,14 +32,13 @@ import {
 } from "lucide-react";
 
 import type { BrowserTabItem } from "@/components/element/browser-tabs";
+import { RecentDownloads } from "@/components/element/recent-downloads";
+import { PortalPanel } from "@/providers/portal";
 import { AddressBarForm } from "@/components/form/address-bar-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/providers/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/providers/tooltip";
+import { cn } from "@/lib/utils";
 import { useFullScreen } from "@/hooks/use-full-screen";
 import {
   getPortalMenuAnchor,
@@ -47,6 +48,8 @@ import {
 import type { BrowserInternalPage } from "@/lib/browser/internal-pages";
 
 const systemPageButtons = [
+  { page: "archive", label: "Archive", icon: Archive },
+  { page: "shortcuts", label: "Shortcuts", icon: Keyboard },
   { page: "bookmarks", label: "Bookmarks", icon: BookOpen },
   { page: "history", label: "History", icon: Clock3 },
   { page: "downloads", label: "Downloads", icon: Download },
@@ -95,7 +98,12 @@ function AddressBarButton({
       <TooltipContent
         side="bottom"
         align={tooltipAlign}
-        className="w-[90px] min-w-[90px] max-w-[90px] whitespace-normal break-words"
+        className={cn(
+          "w-[90px] min-w-[90px] max-w-[90px] whitespace-normal break-words",
+          tooltipAlign === "end"
+            ? "justify-end text-right"
+            : "justify-start text-left",
+        )}
       >
         {title}
       </TooltipContent>
@@ -132,6 +140,8 @@ function AddressBar({
   const inputRef = useRef<HTMLInputElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const siteButtonRef = useRef<HTMLButtonElement>(null);
+  const downloadButtonRef = useRef<HTMLButtonElement>(null);
+  const [downloadsOpen, setDownloadsOpen] = useState(false);
 
   const openSiteInfo = async () => {
     if (!siteButtonRef.current) return;
@@ -146,8 +156,8 @@ function AddressBar({
   const displayValue = isFocused
     ? value
     : activeTab.url
-        .replace(/^https?:\/\/(?:www\.)?/i, "")
-        .replace(/^([^/?#]+)\/$/, "$1");
+      .replace(/^https?:\/\/(?:www\.)?/i, "")
+      .replace(/^([^/?#]+)\/$/, "$1");
   // Keep the real input for editing/selection; paint the same text above it.
   const urlParts = displayValue.match(
     /^(https?:\/\/|gorth:\/\/)?([^/?#\s]+)(.*)$/i,
@@ -281,11 +291,11 @@ function AddressBar({
         <ArrowRight />
       </AddressBarButton>
       <AddressBarButton
-        aria-label={activeTab.isLoading ? "Stop loading" : "Reload"}
+        aria-label={activeTab.isLoading ? "Loading" : "Reload"}
         disabled={activeTab.internalPage !== null}
         onClick={activeTab.isLoading ? onStop : onReload}
         size="icon"
-        title={activeTab.isLoading ? "Stop loading" : "Reload"}
+        title={activeTab.isLoading ? "Loading" : "Reload"}
         variant="ghost"
       >
         {activeTab.isLoading ? <X /> : <RotateCw />}
@@ -314,7 +324,7 @@ function AddressBar({
         disabled={activeTab.internalPage !== null}
         onClick={onBookmark}
         size="icon"
-        title="Bookmark this page"
+        title="Bookmark"
         variant="ghost"
       >
         <Bookmark className={isBookmarked ? "fill-current" : undefined} />
@@ -329,7 +339,7 @@ function AddressBar({
         onClick={() => void openSiteInfo()}
         ref={siteButtonRef}
         size="icon"
-        title="Site information"
+        title="Information"
         variant="ghost"
       >
         <SlidersHorizontal />
@@ -392,14 +402,21 @@ function AddressBar({
           <AddressBarButton
             aria-label={label}
             key={page}
-            onClick={() => onOpenInternal(page)}
+            onClick={() =>
+              page === "downloads"
+                ? setDownloadsOpen(!downloadsOpen)
+                : onOpenInternal(page)
+            }
+            ref={page === "downloads" ? downloadButtonRef : undefined}
+            aria-expanded={page === "downloads" ? downloadsOpen : undefined}
+            aria-haspopup={page === "downloads" ? "menu" : undefined}
             size="icon"
             title={label}
             tooltipAlign="end"
             variant={
               activeTab.internalPage === page ||
-              (page === "settings" &&
-                activeTab.internalPage?.startsWith("settings/"))
+                (page === "settings" &&
+                  activeTab.internalPage?.startsWith("settings/"))
                 ? "secondary"
                 : "ghost"
             }
@@ -409,11 +426,24 @@ function AddressBar({
         ))}
       </div>
 
+      {downloadsOpen && downloadButtonRef.current && (
+        <PortalPanel
+          anchor={getPortalMenuAnchor(downloadButtonRef.current)}
+          align="end"
+          onClose={() => setDownloadsOpen(false)}
+        >
+          <RecentDownloads
+            onClose={() => setDownloadsOpen(false)}
+            onShowAll={() => onOpenInternal("downloads")}
+          />
+        </PortalPanel>
+      )}
+
       <AddressBarButton
         aria-label="Toggle sidebar"
         onClick={onToggleSidebar}
         size="icon"
-        title="Toggle sidebar"
+        title="Sidebar"
         tooltipAlign="end"
         variant={isSidebarOpen ? "secondary" : "ghost"}
       >
@@ -425,7 +455,7 @@ function AddressBar({
         onClick={() => void openBrowserMenu()}
         ref={menuButtonRef}
         size="icon"
-        title="Browser menu"
+        title="Menu"
         tooltipAlign="end"
         variant="ghost"
       >

@@ -1,6 +1,12 @@
 import type { BrowserInternalPage } from "@/lib/browser/internal-pages";
 
 interface PersistedTab {
+  isSleeping?: boolean;
+  lastActiveAt?: number;
+  navigation?: {
+    entries: { url: string; title: string }[];
+    activeIndex: number;
+  };
   id: string;
   title: string;
   url: string;
@@ -25,6 +31,8 @@ interface PersistedHistoryItem {
 }
 
 interface BrowserPreferences {
+  sleepAfterMinutes: number;
+  archiveAfterDays: number;
   flags: Record<string, boolean>;
   sidebarSide: "left" | "right";
   showTitlebarLogo: boolean;
@@ -40,6 +48,16 @@ interface BrowserSnapshot {
   preferences: BrowserPreferences;
   splitTabId: string | null;
   tabs: PersistedTab[];
+  groups: PersistedTabGroup[];
+}
+
+type TabGroupMode = "normal" | "split" | "glance";
+
+interface PersistedTabGroup {
+  id: string;
+  name: string;
+  mode: TabGroupMode;
+  tabIds: string[];
 }
 
 interface PersistedWindowState {
@@ -51,6 +69,8 @@ interface PersistedWindowState {
 }
 
 const defaultBrowserPreferences: BrowserPreferences = {
+  sleepAfterMinutes: 15,
+  archiveAfterDays: 0,
   flags: { memorySaver: true, smoothScrolling: true },
   sidebarSide: "left",
   showTitlebarLogo: true,
@@ -66,5 +86,7 @@ export type {
   PersistedBookmark,
   PersistedHistoryItem,
   PersistedTab,
+  PersistedTabGroup,
+  TabGroupMode,
   PersistedWindowState,
 };
