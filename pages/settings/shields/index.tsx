@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { formatDateTime } from "@/lib/utils/formatter";
 import {
   normalizeSite,
   type ShieldStatus,
@@ -102,7 +103,7 @@ export function SettingsSectionPage() {
                 ? "Filter engine ready"
                 : "Filter engine unavailable"}
               {status?.updatedAt
-                ? ` · Updated ${new Date(status.updatedAt).toLocaleString()}`
+                ? ` · Updated ${formatDateTime(status.updatedAt)}`
                 : " · Bundled filters"}
             </p>
             <Button

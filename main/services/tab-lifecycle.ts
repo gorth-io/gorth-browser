@@ -12,6 +12,7 @@ import {
 } from "@/main/windows/capital";
 import { destroyWebview } from "@/main/windows/webview";
 import { hasActiveTabDownload } from "@/main/services/downloads";
+import { loadWebsite } from "@/main/services/navigation";
 
 export function synchronizeTabSession(
   window: BrowserWindow,
@@ -112,7 +113,7 @@ export async function wakeTab(window: BrowserWindow, tabId: string) {
       navigation.entries.every((entry) => isAllowedNavigationUrl(entry.url))
     ) {
       await record.view.webContents.navigationHistory.restore(navigation);
-    } else await record.view.webContents.loadURL(tab.url);
+    } else await loadWebsite(record.view.webContents, tab.url);
   } catch (error) {
     if (!record.view.webContents.isDestroyed())
       console.warn("Unable to restore tab navigation.", error);

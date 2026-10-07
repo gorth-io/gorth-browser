@@ -39,6 +39,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/providers/tooltip";
 import { cn } from "@/lib/utils";
+import { formatAddress } from "@/lib/utils/formatter";
 import { useFullScreen } from "@/hooks/use-full-screen";
 import {
   getPortalMenuAnchor,
@@ -153,11 +154,7 @@ function AddressBar({
     if (command === "settings") onOpenInternal("settings");
   };
 
-  const displayValue = isFocused
-    ? value
-    : activeTab.url
-      .replace(/^https?:\/\/(?:www\.)?/i, "")
-      .replace(/^([^/?#]+)\/$/, "$1");
+  const displayValue = isFocused ? value : formatAddress(activeTab.url);
   // Keep the real input for editing/selection; paint the same text above it.
   const urlParts = displayValue.match(
     /^(https?:\/\/|gorth:\/\/)?([^/?#\s]+)(.*)$/i,
@@ -415,8 +412,8 @@ function AddressBar({
             tooltipAlign="end"
             variant={
               activeTab.internalPage === page ||
-                (page === "settings" &&
-                  activeTab.internalPage?.startsWith("settings/"))
+              (page === "settings" &&
+                activeTab.internalPage?.startsWith("settings/"))
                 ? "secondary"
                 : "ghost"
             }

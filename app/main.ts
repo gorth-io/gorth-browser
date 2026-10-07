@@ -7,6 +7,7 @@ import { registerContextMenuIpc } from "@/main/ipc/context-menu";
 import { registerBrowserIpc } from "@/main/ipc/browser";
 import { registerWindowIpc } from "@/main/ipc/window";
 import { registerDatabaseIpc } from "@/main/ipc/database";
+import { registerRpcIpc } from "@/main/ipc/rpc";
 import { configureDataDirectory } from "@/services/data-directory";
 import { app, BrowserWindow, protocol, session, dialog } from "electron";
 import { registerDownloadIpc } from "@/main/ipc/downloads";
@@ -98,6 +99,7 @@ registerContextMenuIpc();
 registerBrowserIpc();
 registerWindowIpc();
 registerDatabaseIpc();
+registerRpcIpc();
 registerDownloadIpc();
 registerTabLifecycleIpc();
 

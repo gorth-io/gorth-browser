@@ -9,6 +9,8 @@ import {
 } from "react";
 
 import { Dashboard } from "@/layouts/dashboard";
+import { useTRPC, useTRPCClient } from "@/lib/rpc/client";
+import { useQueryClient } from "@tanstack/react-query";
 import type {
   BrowserBookmark,
   BrowserSidebarSide,
@@ -115,6 +117,9 @@ function toPersistedTab(tab: BrowserTabItem): PersistedTab {
 }
 
 export default function Application() {
+  const desktop = useTRPCClient();
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
   const authentication = useAuth();
   const authTabId = useRef<string | null>(null);
   useEffect(() => {
@@ -307,8 +312,13 @@ export default function Application() {
 
   useEffect(() => {
     let cancelled = false;
-    void window.electronAPI.persistence
-      .load()
+    void queryClient
+      .fetchQuery(
+        trpc.session.load.queryOptions(undefined, {
+          staleTime: Infinity,
+          retry: false,
+        }),
+      )
       .then((snapshot) => {
         if (cancelled) return;
         const restoredTabs: BrowserTabItem[] = snapshot.tabs.length
@@ -566,7 +576,7 @@ export default function Application() {
 
     void window.electronAPI.persistence
       .closeTab(toPersistedTab(tabs[closingIndex]))
-      .then(() => window.electronAPI.persistence.listGroups())
+      .then(() => desktop.groups.list.query())
       .then(setGroups)
       .catch((error: unknown) =>
         console.error("Unable to update closed tab groups.", error),
@@ -915,7 +925,7 @@ export default function Application() {
               onTogglePin={toggleTabPinned}
             />
           )}
-{isSidebarVisible && sidebarSide === "left" && (
+          {isSidebarVisible && sidebarSide === "left" && (
             <Dashboard
               variant="bookmarks"
               side={sidebarSide}
@@ -941,13 +951,11 @@ export default function Application() {
                     await window.electronAPI.persistence.save(
                       currentSnapshot.current,
                     );
-                  const saved =
-                    await window.electronAPI.persistence.saveGroup(group);
+                  const saved = await desktop.groups.save.mutate(group);
                   setGroups(saved);
                 }}
                 onDeleteGroup={async (id) => {
-                  const saved =
-                    await window.electronAPI.persistence.deleteGroup(id);
+                  const saved = await desktop.groups.delete.mutate(id);
                   setGroups(saved);
                 }}
                 onOpenGroup={(id) => {
@@ -1009,7 +1017,7 @@ export default function Application() {
               />
             )}
           </main>
-{isSidebarVisible && sidebarSide === "right" && (
+          {isSidebarVisible && sidebarSide === "right" && (
             <Dashboard
               variant="bookmarks"
               side={sidebarSide}

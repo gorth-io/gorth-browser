@@ -7,6 +7,7 @@ import {
 import { ipcMain } from "electron";
 import { parseInternalPage } from "@/lib/browser/internal-pages";
 import { wakeTab } from "@/main/services/tab-lifecycle";
+import { loadWebsite } from "@/main/services/navigation";
 import {
   type BrowserLayout,
   getWindowFromSender,
@@ -195,9 +196,18 @@ export function registerBrowserIpc() {
     updateViewBounds(window);
 
     try {
-      await record.view.webContents.loadURL(url);
+      await loadWebsite(record.view.webContents, url);
       return true;
     } catch (error) {
+      // Redirects, replacement navigations and Stop cancel the original load.
+      // Match did-fail-load: ERR_ABORTED is not an unavailable website.
+      if (
+        error &&
+        typeof error === "object" &&
+        "errno" in error &&
+        error.errno === -3
+      )
+        return false;
       if (!state.internalPages.has(tabId)) {
         showErrorPage(
           window,

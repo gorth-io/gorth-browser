@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Ranger } from "@/components/custom/ranger";
 
 export function SettingsSectionPage(
   props: Pick<
@@ -44,19 +45,32 @@ export function SettingsSectionPage(
             <label htmlFor="sleep-minutes">
               Sleep after inactivity (minutes)
             </label>
-            <Input
-              id="sleep-minutes"
-              className="h-9 w-24"
-              type="number"
-              min={1}
-              max={1440}
-              value={props.sleepAfterMinutes}
-              onChange={(event) =>
-                props.onSleepAfterMinutesChange(
-                  Math.min(1440, Math.max(1, Number(event.target.value) || 1)),
-                )
-              }
-            />
+            <div className="flex items-center gap-2">
+              <Ranger
+                id="sleep-minutes-slider"
+                label="Sleep after inactivity (minutes)"
+                min={1}
+                max={1440}
+                value={props.sleepAfterMinutes}
+                onValueChange={props.onSleepAfterMinutesChange}
+              />
+              <Input
+                id="sleep-minutes"
+                className="h-9 w-24"
+                type="number"
+                min={1}
+                max={1440}
+                value={props.sleepAfterMinutes}
+                onChange={(event) =>
+                  props.onSleepAfterMinutesChange(
+                    Math.min(
+                      1440,
+                      Math.max(1, Number(event.target.value) || 1),
+                    ),
+                  )
+                }
+              />
+            </div>
           </div>
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -68,19 +82,29 @@ export function SettingsSectionPage(
                 database until you restore or delete them.
               </p>
             </div>
-            <Input
-              id="archive-days"
-              className="h-9 w-24"
-              type="number"
-              min={0}
-              max={365}
-              value={props.archiveAfterDays}
-              onChange={(event) =>
-                props.onArchiveAfterDaysChange(
-                  Math.min(365, Math.max(0, Number(event.target.value) || 0)),
-                )
-              }
-            />
+            <div className="flex items-center gap-2">
+              <Ranger
+                id="archive-days-slider"
+                label="Archive after inactivity (days)"
+                min={0}
+                max={365}
+                value={props.archiveAfterDays}
+                onValueChange={props.onArchiveAfterDaysChange}
+              />
+              <Input
+                id="archive-days"
+                className="h-9 w-24"
+                type="number"
+                min={0}
+                max={365}
+                value={props.archiveAfterDays}
+                onChange={(event) =>
+                  props.onArchiveAfterDaysChange(
+                    Math.min(365, Math.max(0, Number(event.target.value) || 0)),
+                  )
+                }
+              />
+            </div>
           </div>
           <Button
             className="h-9"

@@ -19,24 +19,10 @@ import {
 import {
   browserSnapshotSchema,
   persistedTabSchema,
+  tabGroupSchema,
 } from "@/lib/browser/session-schema";
 
 export function registerDatabaseIpc() {
-  const groupSchema = z
-    .object({
-      id: z.string().min(1).max(128),
-      name: z.string().trim().min(1).max(80),
-      mode: z.enum(["normal", "split", "glance"]),
-      tabIds: z.array(z.string().min(1).max(128)).min(1).max(500),
-    })
-    .refine(
-      (group) => new Set(group.tabIds).size === group.tabIds.length,
-      "Duplicate group members.",
-    )
-    .refine(
-      (group) => group.mode === "normal" || group.tabIds.length === 2,
-      "Split and glance groups require exactly two tabs.",
-    );
   const requireAppSender = (sender: Electron.WebContents) => {
     const window = getWindowFromSender(sender);
     if (!window || window.webContents !== sender)
@@ -45,7 +31,7 @@ export function registerDatabaseIpc() {
   };
   ipcMain.handle("tab-groups:save", (event, input: unknown) => {
     return saveTabGroup(
-      groupSchema.parse(input),
+      tabGroupSchema.parse(input),
       requireAppSender(event.sender),
     );
   });

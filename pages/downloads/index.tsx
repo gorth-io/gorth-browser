@@ -16,11 +16,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import type { DownloadInfo, DownloadState } from "@/lib/browser/downloads";
 import {
+  formatDateTime,
   formatDownloadBytes,
-  type DownloadInfo,
-  type DownloadState,
-} from "@/lib/browser/downloads";
+  formatRemainingTime,
+  formatTransferRate,
+} from "@/lib/utils/formatter";
 import type { BrowserInternalPage } from "@/lib/browser/internal-pages";
 
 const stateLabels: Record<DownloadState, string> = {
@@ -235,10 +237,10 @@ export function DownloadsPage({
                       {item.isActive && percent !== null && ` · ${percent}%`}
                       {item.state === "progressing" &&
                         item.bytesPerSecond > 0 &&
-                        ` · ${formatDownloadBytes(item.bytesPerSecond)}/s`}
+                        ` · ${formatTransferRate(item.bytesPerSecond)}`}
                       {item.state === "progressing" &&
                         remaining !== null &&
-                        ` · ${remaining < 60 ? `${remaining}s` : `${Math.ceil(remaining / 60)} min`} remaining`}
+                        ` · ${formatRemainingTime(remaining)} remaining`}
                     </p>
                     {item.savePath && (
                       <p
@@ -361,7 +363,7 @@ export function DownloadsPage({
                         </Button>
                       )}
                       <span className="self-center text-xs text-muted-foreground">
-                        {new Date(item.startedAt).toLocaleString()}
+                        {formatDateTime(item.startedAt)}
                       </span>
                     </div>
                   </div>

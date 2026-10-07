@@ -23,6 +23,7 @@ export interface BrowserTabState {
   internalPage: BrowserInternalPage | null;
 }
 export interface ElectronApi {
+  rpc: typeof import("@/preload/api/rpc").rpcApi;
   lifecycle: typeof import("@/preload/api/lifecycle").lifecycleApi;
   shields: typeof import("@/preload/api/shields").shieldsApi;
   shortcuts: typeof import("@/preload/api/shortcuts").shortcutsApi;

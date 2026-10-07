@@ -4,6 +4,21 @@ import {
   type BrowserInternalPage,
 } from "@/lib/browser/internal-pages";
 const id = z.string().min(1).max(128);
+export const tabGroupSchema = z
+  .object({
+    id,
+    name: z.string().trim().min(1).max(80),
+    mode: z.enum(["normal", "split", "glance"]),
+    tabIds: z.array(id).min(1).max(500),
+  })
+  .refine(
+    (group) => new Set(group.tabIds).size === group.tabIds.length,
+    "Duplicate group members.",
+  )
+  .refine(
+    (group) => group.mode === "normal" || group.tabIds.length === 2,
+    "Split and glance groups require exactly two tabs.",
+  );
 const url = z.string().max(32768);
 const internalPage = z
   .custom<BrowserInternalPage>(

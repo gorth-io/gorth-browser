@@ -31,6 +31,7 @@ import {
   trackTabLifecycle,
 } from "@/main/services/tab-lifecycle";
 import { registerBlockerContents } from "@/main/services/content-blocker";
+import { canRecoverQuicFailure } from "@/main/services/navigation";
 
 export type BrowserLayout = WebviewLayout;
 
@@ -272,6 +273,7 @@ export function createTabView(window: BrowserWindow, tabId: string) {
     "did-fail-load",
     (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
       if (!isMainFrame || errorCode === -3) return;
+      if (canRecoverQuicFailure(view.webContents, errorCode)) return;
       showErrorPage(
         window,
         tabId,
@@ -412,7 +414,8 @@ export const createWindow = (sessionId: string = crypto.randomUUID()) => {
   mainWindow.webContents.on("will-navigate", (event, destination) => {
     try {
       const renderer = new URL(appUrl || MAIN_WINDOW_VITE_DEV_SERVER_URL);
-      if (new URL(destination).origin !== renderer.origin) event.preventDefault();
+      if (new URL(destination).origin !== renderer.origin)
+        event.preventDefault();
     } catch {
       event.preventDefault();
     }
@@ -506,7 +509,8 @@ export const createWindow = (sessionId: string = crypto.randomUUID()) => {
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL || appUrl) {
     void mainWindow.loadURL(
-      new URL("assets/index.html", appUrl || MAIN_WINDOW_VITE_DEV_SERVER_URL).href,
+      new URL("assets/index.html", appUrl || MAIN_WINDOW_VITE_DEV_SERVER_URL)
+        .href,
     );
   } else {
     void mainWindow.loadFile(
